@@ -1,0 +1,51 @@
+{
+  "name": "clyvo-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Clyvo - API de clientes, catalogo, propostas e vendas",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:migrate": "node --import tsx src/scripts/migrate.ts",
+    "db:reset": "node --import tsx src/scripts/migrate.ts --force",
+    "db:seed": "node --import tsx src/scripts/seed.ts",
+    "db:setup": "npm run db:migrate && npm run db:seed",
+    "test:api": "node --import tsx src/scripts/smoke-test.ts",
+    "db:migrate:prod": "node dist/scripts/migrate.js",
+    "db:seed:prod": "node dist/scripts/seed.js",
+    "start:prod": "node dist/server.js",
+    "test:release": "node --import tsx src/scripts/release-test.ts",
+    "test:providers": "node --import tsx src/scripts/provider-test.ts",
+    "test:cly": "node --import tsx src/scripts/cly-test.ts",
+    "test:support": "node --import tsx src/scripts/support-test.ts",
+    "test:market": "node --import tsx src/scripts/marketplace-test.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "mysql2": "^3.11.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^20.14.10",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}

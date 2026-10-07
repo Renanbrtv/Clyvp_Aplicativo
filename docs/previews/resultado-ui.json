@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "checks": [
+    "login",
+    "Cly sem chave nao simula IA",
+    "tema escuro persistente",
+    "tema claro",
+    "precos dos planos",
+    "exclusao exige confirmacao",
+    "redefinicao de senha acessivel"
+  ],
+  "browserErrors": []
+}

@@ -1,0 +1,22 @@
+{
+  "original_file_count": 251,
+  "removed_files": [],
+  "protected_files": {
+    "frontend/app.json": "6b299587f196a6d1931666946f9da4d3f49ce74cbbd7f9c0230ef4b7bb248a58",
+    "frontend/eas.json": "6c792b1b8b38998791beb360e037121fbbd4adecc89ad221dd767ae94fde22f3",
+    "frontend/babel.config.js": "c27c3e8f3470c96cfa6f165c5ada8dcd66b1db7556c22c31cb8f0450babdf209",
+    "frontend/tsconfig.json": "bbb878fdf2b90304a7888e83661aaeb9b1c3a766c909013f495a8a09f0bd711c",
+    "Dockerfile": "212b0fcd8755696316891acdc23bf376307424c82dd37ff1e44e5ead27795448",
+    "preparar-publicacao.cmd": "678c098762518d1a6df7c2465279a2a3f9898183439e5829d55692ee9645b9c5",
+    "scripts/configurar-publicacao.mjs": "e6db43ce4a730c4896fbb59a6be138891c97062e10d157dcb829c6132773f455",
+    "frontend/scripts/check-release.mjs": "b32d5240377b98bbcc529bb43687a841111860803ab40133a05411b57e218812",
+    "scripts/check-release.mjs": "daff34b0a0a7950cdb971debdfb7be429fe460f0ad61f0556fa5fd39ebea3e03",
+    "frontend/src/features/legal/legal-content.ts": "ac593cce7eda2d1f51469725eef7498925090a6c2f336aee5e395850d82977c4",
+    "deploy/ecosystem.config.js": "f80fb51f3573fb58541f3eb7488e88fddf3d4c001289f724758e9ae4ad5288bb",
+    "deploy/nginx-clyvo.conf": "b48a592c90822a8ed0811e8fdd735a909d0f2127d57c22d0875b5cbfc09b9392",
+    "deploy/docker-compose.yml": "5a246d37bc4071f8cd6813ff9a4ec537e75f29b87b0ad699b7eaeadaaa4dee20",
+    "deploy/logs/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "added_dependency": "expo-document-picker ~57.0.3",
+  "publication_config_preserved": true
+}

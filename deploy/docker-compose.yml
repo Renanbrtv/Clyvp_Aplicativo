@@ -1,0 +1,49 @@
+# ==========================================================
+# Clyvo - subir API + MySQL de uma vez, em qualquer servidor
+# com Docker instalado.
+#
+# Rode a partir da RAIZ do projeto:
+#   docker compose --env-file backend/.env -f deploy/docker-compose.yml up -d
+#
+# Criar as tabelas na primeira vez:
+#   docker compose --env-file backend/.env -f deploy/docker-compose.yml exec api npm run db:migrate:prod
+# ==========================================================
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?defina DB_ROOT_PASSWORD no .env}
+      MYSQL_DATABASE: ${DB_NAME:-clyvo}
+      MYSQL_USER: ${DB_USER:-clyvo}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - clyvo-mysql:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-p${DB_ROOT_PASSWORD}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Porta fechada para fora de proposito: so a API fala com o banco.
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ../backend/.env
+    environment:
+      # Dentro do Docker o banco atende pelo nome do servico, nao por localhost.
+      DB_HOST: db
+      DB_PORT: '3306'
+      DB_SSL: 'false'
+    ports:
+      - '127.0.0.1:3333:3333'
+
+volumes:
+  clyvo-mysql:

@@ -1,0 +1,18 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.env
+.env.local
+.env.production
+expo-env.d.ts
+
+# Chave de publicacao da Play Store - NUNCA versionar.
+google-play-key.json
+*.keystore
+*.jks
+credentials.json
+
+android/
+ios/
