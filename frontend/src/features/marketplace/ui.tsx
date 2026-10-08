@@ -41,6 +41,17 @@ export const CATEGORIES = [
   'Pet sitter',
   'Outros',
 ];
+const categoryLabels: Record<string, string> = {
+  'Tecnico de informatica': 'Técnico de informática',
+  'Manutencao de celular': 'Manutenção de celular',
+  'Instalacao de cameras': 'Instalação de câmeras',
+  'Editor de video': 'Editor de vídeo',
+  Fotografo: 'Fotógrafo',
+  Manutencao: 'Manutenção',
+  'Montagem de moveis': 'Montagem de móveis',
+  'Servicos domesticos': 'Serviços domésticos',
+};
+export const categoryLabel = (value: string) => categoryLabels[value] ?? value;
 export const currency = (n: any) =>
   Number(n ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 export const moneyInput = (n: any) => (n == null ? '' : Number(n).toFixed(2).replace('.', ','));
@@ -51,22 +62,27 @@ export const prettyDay = (v: any) => (v ? day(v).split('-').reverse().join('/') 
 export const parse = (v: any, fallback: any = []) =>
   typeof v === 'string' ? JSON.parse(v) : (v ?? fallback);
 export function useData(path: string) {
+  const requestId = useRef(0);
   const [data, setData] = useState<any>(null),
     [loading, setLoading] = useState(true),
     [error, setError] = useState('');
   const load = useCallback(async () => {
+    const current = ++requestId.current;
+    setLoading(true);
     setError('');
     try {
-      setData(await api.get(path));
+      const result = await api.get(path);
+      if (current === requestId.current) setData(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nao foi possivel carregar.');
+      if (current === requestId.current) setError(e instanceof Error ? e.message : 'Não foi possível carregar.');
     } finally {
-      setLoading(false);
+      if (current === requestId.current) setLoading(false);
     }
   }, [path]);
   useFocusEffect(
     useCallback(() => {
       void load();
+      return () => { requestId.current++; };
     }, [load]),
   );
   return { data, loading, error, load };
@@ -76,7 +92,7 @@ export function useAction(reload?: () => Promise<void>) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
-  const run = async (fn: () => Promise<unknown>, message = 'Alteracao salva.') => {
+  const run = async (fn: () => Promise<unknown>, message = 'Alteração salva.') => {
     if (running.current) return;
     running.current = true;
     setBusy(true);
@@ -87,9 +103,10 @@ export function useAction(reload?: () => Promise<void>) {
       if (reload) await reload();
       setNotice(message);
     } catch (e) {
+      const fieldLabels: Record<string,string> = {title:'Título',description:'Descrição',city:'Cidade',region:'Bairro',dueDate:'Prazo',budgetFrom:'Orçamento inicial',budgetTo:'Orçamento máximo',amount:'Valor',message:'Mensagem',bio:'Descrição profissional',services:'Serviços',name:'Nome',skills:'Habilidades',photo:'Foto',photos:'Fotos',experience:'Experiência',radiusKm:'Distância'};
       setError(
         e instanceof Error
-          ? e.message + ((e as any).details?.map((x: any) => ` ${x.field}: ${x.message}`).join('') ?? '')
+          ? e.message + ((e as any).details?.map((x: any) => ` ${fieldLabels[x.field] ?? 'Campo'}: ${/[áéíóúãõç]|Informe|Escolha|Revise/.test(x.message) ? x.message : 'Confira o preenchimento.'}`).join('') ?? '')
           : 'Tente novamente.',
       );
     } finally {
@@ -118,7 +135,7 @@ export function MarketScreen({
   const { status } = useAuth();
   if (status === 'visitante') return <Redirect href="/(auth)/login" />;
   return (
-    <Screen scroll keyboardAware>
+    <Screen scroll keyboardAware bottomInset={theme.size.tabBar}>
       <ScreenHeader title={title} titleLines={2} subtitle={subtitle} />
       <View style={styles.body}>
         {loading || status === 'carregando' ? (
@@ -132,7 +149,7 @@ export function MarketScreen({
     </Screen>
   );
 }
-export function Field({ label, multiline, ...props }: TextInputProps & { label: string }) {
+export function Field({ label, multiline, error, ...props }: TextInputProps & { label: string; error?: string }) {
   useThemeMode();
   return (
     <View style={{ gap: 7 }}>
@@ -142,8 +159,9 @@ export function Field({ label, multiline, ...props }: TextInputProps & { label: 
         accessibilityLabel={label}
         multiline={multiline}
         placeholderTextColor={theme.colors.textMuted}
-        style={[styles.input, multiline && { minHeight: 110, textAlignVertical: 'top' }]}
+        style={[styles.input, multiline && { minHeight: 110, textAlignVertical: 'top' }, error ? {borderColor:theme.colors.danger}:null]}
       />
+      {error ? <Note error>{error}</Note> : null}
     </View>
   );
 }
@@ -171,7 +189,7 @@ export function Choices({
             <Pressable
               key={v}
               accessibilityRole={multi ? 'checkbox' : 'radio'}
-              accessibilityLabel={v}
+              accessibilityLabel={categoryLabel(v)}
               accessibilityState={{ checked: selected }}
               onPress={() =>
                 onChange(
@@ -184,7 +202,7 @@ export function Choices({
               }
               style={[styles.chip, selected && styles.selected]}
             >
-              <Text style={{ color: selected ? theme.colors.primaryInk : theme.colors.text }}>{v}</Text>
+              <Text style={{ color: selected ? theme.colors.primaryInk : theme.colors.text }}>{categoryLabel(v)}</Text>
             </Pressable>
           );
         })}
@@ -244,7 +262,7 @@ export function MarketLinks() {
   return (
     <View style={{ gap: 8 }}>
       <Button
-        label="Minhas propostas e trabalhos"
+        label="Minhas publicações, propostas e trabalhos"
         variant="outline"
         onPress={() => router.push('/mercado/minhas')}
       />
@@ -276,7 +294,7 @@ export function Picture({
       });
       if (result.canceled) return;
       const asset = result.assets[0];
-      if ((asset.size ?? 0) > 250000) throw new Error('Use PNG ou JPEG de ate 250 KB.');
+      if ((asset.size ?? 0) > 250000) throw new Error('Use PNG ou JPEG de até 250 KB.');
       let data: string;
       if (Platform.OS === 'web') {
         data = asset.base64 ?? asset.uri;
@@ -291,10 +309,10 @@ export function Picture({
       } else {
         data = `data:${asset.mimeType ?? 'image/jpeg'};base64,${await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 })}`;
       }
-      if (data.length > 350000) throw new Error('Use uma imagem de ate 250 KB.');
+      if (data.length > 350000) throw new Error('Use uma imagem de até 250 KB.');
       onChange(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nao foi possivel abrir a imagem.');
+      setError(e instanceof Error ? e.message : 'Não foi possível abrir a imagem.');
     }
   }
   return (
@@ -310,7 +328,7 @@ export function Picture({
         </>
       ) : null}
       <Button label={label} variant="outline" onPress={() => void pick()} />
-      <Note>PNG ou JPEG, ate 250 KB. Nao inclua documentos ou dados particulares.</Note>
+      <Note>PNG ou JPEG, até 250 KB. Não inclua documentos ou dados particulares.</Note>
       {error ? <Note error>{error}</Note> : null}
     </View>
   );

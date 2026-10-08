@@ -7,81 +7,81 @@ export default function MarketRules() {
   const r = useRouter();
   return (
     <Screen scroll>
-      <ScreenHeader title="Regras do marketplace" subtitle="Versao mercado-2026-10-v1" />
+      <ScreenHeader title="Regras do marketplace" subtitle="Versão mercado-2026-10-v2" />
       <View style={styles.body}>
         <Card>
-          <Text style={styles.title}>Trabalho com respeito e informacoes verdadeiras</Text>
+          <Text style={styles.title}>Trabalho com respeito e informações verdadeiras</Text>
           <Note>
-            Publique apenas servicos e pedidos licitos. Sao proibidos golpes, assedio, discriminacao, ameacas,
-            conteudo sexual, exploracao, violencia e uso de dados de terceiros sem autorizacao. Nao prometa
-            qualificacoes, licencas ou experiencia que voce nao possui.
+            Publique apenas serviços e pedidos lícitos. São proibidos golpes, assédio, discriminação, ameaças,
+            nudez, conteúdo sexual, venda de armas ou drogas, exploração, violência explícita e uso de dados de terceiros sem autorização. Não prometa
+            qualificações, licenças ou experiência que você não possui.
           </Note>
           <Note>
-            Antes de publicar, voce precisa aceitar estas regras. Conteudo denunciado pode ser ocultado e
-            contas podem ter a publicacao suspensa apos analise da equipe.
+            Antes de publicar, você precisa aceitar estas regras. Anúncios, perfis e fotos passam por análise manual antes de ficarem públicos. Alterações exigem nova aprovação, sem prazo garantido. Conteúdo denunciado pode ser ocultado e
+            contas podem ter a publicação suspensa após análise da equipe.
           </Note>
         </Card>
         <Card>
           <Text style={styles.title}>Combine antes de contratar</Text>
           <Note>
-            O Clyvo facilita o encontro entre pessoas. Nao verifica qualificacoes profissionais nem garante
-            contratacoes, qualidade, renda ou pagamento. Confira as informacoes e os requisitos do servico
+            O Clyvo facilita o encontro entre pessoas. Não verifica qualificações profissionais nem garante
+            contratações, qualidade, renda ou pagamento. Confira as informações e os requisitos do serviço
             antes de aceitar.
           </Note>
           <Note>
-            A proposta aceita cria um trabalho. Mudancas de preco e prazo dependem da confirmacao da outra
-            parte. A conclusao precisa ser confirmada pelas duas pessoas, permitindo uma avaliacao por
+            A proposta aceita cria um trabalho. Mudanças de preço e prazo dependem da confirmação da outra
+            parte. A conclusão precisa ser confirmada pelas duas pessoas, permitindo uma avaliação por
             participante.
           </Note>
           <Note>
-            O pagamento dos servicos e combinado fora do Clyvo. O aplicativo nao cobra, recebe, custodia
-            valores nem processa estornos desses trabalhos. A assinatura Pro e separada e usa a loja.
+            O pagamento dos serviços é combinado fora do Clyvo. O aplicativo não cobra, recebe, custodia
+            valores nem processa estornos desses trabalhos. A assinatura Pro é separada e usa a loja.
           </Note>
         </Card>
         <Card>
-          <Text style={styles.title}>Dados e privacidade neste modulo</Text>
+          <Text style={styles.title}>Dados e privacidade neste módulo</Text>
           <Note>
-            Ao publicar, seu nome profissional, foto, habilidades, descricao, cidade, disponibilidade e faixa
-            de preco ficam visiveis a outros usuarios autenticados. Avaliacoes e notas vinculadas a trabalhos
-            concluidos sao publicas dentro do app.
+            Ao publicar, seu nome profissional, foto, habilidades, descrição, cidade, disponibilidade e faixa
+            de preço ficam visíveis a outros usuários autenticados. Avaliações e notas vinculadas a trabalhos
+            concluídos são públicas dentro do app.
           </Note>
           <Note>
-            Oportunidades compartilham descricao, fotos, orcamento e localizacao aproximada. As coordenadas
-            sao arredondadas para duas casas decimais; a distancia e uma estimativa em linha reta. Nao informe
-            endereco exato, documentos ou dados bancarios em anuncios. Metadados de imagens PNG/JPEG sao
+            Oportunidades compartilham descrição, fotos, orçamento e localização aproximada. As coordenadas
+            são arredondadas para duas casas decimais; a distância é uma estimativa em linha reta. Não informe
+            endereço exato, documentos ou dados bancários em anúncios. Metadados de imagens PNG/JPEG são
             removidos no servidor.
           </Note>
           <Note>
-            Propostas sao visiveis ao autor e ao contratante. Conversas ficam restritas aos participantes;
+            Propostas são visíveis ao autor e ao contratante. Conversas ficam restritas aos participantes;
             mensagens denunciadas podem ser examinadas pelos moderadores autorizados. Telefone e e-mail da
-            conta nao sao exibidos no marketplace.
+            conta não são exibidos no marketplace.
           </Note>
           <Note>
-            Uma denuncia registra motivo, referencia do conteudo e identificacao da conta para analise. Uma
-            copia do relato pode ser encaminhada ao suporte. Ao enviar suporte, voce escolhe o texto e
-            eventual imagem; a equipe recebe identificacao de conta e dados basicos de versao para responder
+            Uma denúncia registra motivo, referência do conteúdo e identificação da conta para análise. Uma
+            cópia do relato pode ser encaminhada ao suporte. Ao enviar suporte, você escolhe o texto e
+            eventual imagem; a equipe recebe identificação de conta e dados básicos de versão para responder
             por e-mail.
           </Note>
           <Note>
-            Os dados ficam no backend do Clyvo enquanto a conta e os registros existirem. A exclusao da conta
+            Os dados ficam no backend do Clyvo enquanto a conta e os registros existirem. A exclusão da conta
             remove os registros associados, inclusive conversas e trabalhos compartilhados. Um contato que a
-            outra pessoa salvou no proprio CRM pode permanecer nessa conta. Mensagens ja enviadas por e-mail
-            ficam na caixa do suporte, fora do banco do app; solicite sua exclusao pelo contato abaixo.
+            outra pessoa salvou no próprio CRM pode permanecer nessa conta. Mensagens já enviadas por e-mail
+            ficam na caixa do suporte, fora do banco do app; solicite sua exclusão pelo contato abaixo.
           </Note>
         </Card>
         <Card>
           <Text style={styles.title}>Denunciar, bloquear e pedir ajuda</Text>
           <Note>
-            Use Denunciar nas oportunidades, perfis, avaliacoes ou mensagens. Bloquear impede novas propostas
+            Use Denunciar nas oportunidades, perfis, avaliações ou mensagens. Bloquear impede novas propostas
             e mensagens entre as contas, preservando os registros de trabalhos para consulta e encerramento.
-            Voce pode desfazer seus bloqueios no Perfil.
+            Você pode desfazer seus bloqueios no Perfil.
           </Note>
           <Note>
-            Suporte e revisao de medidas: skybreakersstudio@gmail.com. Nao envie senhas, tokens, documentos ou
-            dados bancarios. Nao ha promessa de prazo de resposta nesta versao.
+            Suporte e revisão de medidas: skybreakersstudio@gmail.com. Não envie senhas, tokens, documentos ou
+            dados bancários. Não há promessa de prazo de resposta nesta versão.
           </Note>
         </Card>
-        <Button label="Politica de privacidade" variant="outline" onPress={() => r.push('/privacidade')} />
+        <Button label="Política de privacidade" variant="outline" onPress={() => r.push('/privacidade')} />
         <Button label="Termos de uso" variant="ghost" onPress={() => r.push('/termos')} />
         <Button label="Ajuda e suporte" variant="ghost" onPress={() => r.push('/suporte')} />
       </View>

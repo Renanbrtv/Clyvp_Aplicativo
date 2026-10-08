@@ -26,6 +26,12 @@ const req = async (method: string, path: string, body?: unknown, token?: string)
 };
 const password = 'MarketTest@2026',
   users: any[] = [];
+// Test fixtures only: never approve real content through SQL.
+async function approveFixture(type: 'post' | 'profile', target: number, owner: number) {
+  if (env.isProduction || !/test/i.test(env.DB_NAME)) throw new Error('Banco de teste obrigatório.');
+  await execute(`INSERT INTO market_content_reviews(target_type,target_id,owner_id,state) VALUES(?,?,?,'approved')
+    ON DUPLICATE KEY UPDATE state='approved'`, [type,target,owner]);
+}
 async function main() {
   if (env.isProduction || !/test/i.test(env.DB_NAME)) throw new Error('Use apenas banco isolado de teste.');
   Object.assign(env, { EMAIL_API_KEY: '', REVENUECAT_SECRET_KEY: '' });
@@ -81,6 +87,9 @@ async function main() {
   for (const u of users) await s.preferences(u.id, { intent: 'encontrar_clientes', acceptRules: true });
   await s.saveProfile(p.id, profile);
   await s.saveProfile(o.id, { ...profile, name: 'Outro Profissional' });
+  await rejects(() => s.profile(c.id, p.id), 'Perfil pendente fica privado');
+  await approveFixture('profile',p.id,p.id);
+  await approveFixture('profile',o.id,o.id);
   const publicP: any = await s.profile(c.id, p.id);
   check(
     publicP.profile.latitude === -16.68 && !('email' in publicP.profile),
@@ -88,6 +97,8 @@ async function main() {
   );
   const announced = await s.createPost(c.id, post);
   const id = announced.id;
+  await rejects(() => s.post(p.id,id), 'Anúncio pendente fica privado');
+  await approveFixture('post',id,c.id);
   const list: any = await s.posts(p.id, { page: 1, distance: 30, sort: 'proximas', category: post.category });
   check(
     list.posts.some((x: any) => x.id === id && x.distance_km != null),
@@ -220,11 +231,13 @@ async function main() {
   const freePosts: any = await s.mine(c.id);
   let offers = 1;
   for (const item of freePosts.posts.filter((x: any) => x.status === 'aberta')) {
+    await approveFixture('post',item.id,c.id);
     await s.propose(o.id, item.id, offer);
     offers++;
   }
   check(offers === 5, 'Free envia cinco propostas no mes');
   const extra = await s.createPost(p.id, post);
+  await approveFixture('post',extra.id,p.id);
   await rejects(() => s.propose(o.id, extra.id, offer), 'Sexta proposta Free e recusada');
   const secondOffer = await s.propose(
     p.id,
@@ -264,6 +277,7 @@ async function main() {
       ),
     ),
   );
+  for (const item of bulk) await approveFixture('post',item.insertId,p.id);
   const reads = await Promise.allSettled(bulk.map((x) => s.post(v.id, x.insertId)));
   check(
     reads.filter((x) => x.status === 'fulfilled').length === 50,

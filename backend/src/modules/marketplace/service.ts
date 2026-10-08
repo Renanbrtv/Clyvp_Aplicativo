@@ -99,7 +99,7 @@ function postData(p: Row) {
 }
 async function postById(id: number) {
   const p = await row(
-    `SELECT p.*,COALESCE(mp.name,u.name) owner_name FROM market_posts p JOIN users u ON u.id=p.owner_id LEFT JOIN market_profiles mp ON mp.user_id=p.owner_id WHERE p.id=?`,
+    `SELECT p.*,CASE WHEN EXISTS(SELECT 1 FROM market_content_reviews cr WHERE cr.target_type='profile' AND cr.target_id=mp.user_id AND cr.state='approved') THEN mp.name ELSE 'Usuário do Clyvo' END owner_name FROM market_posts p JOIN users u ON u.id=p.owner_id LEFT JOIN market_profiles mp ON mp.user_id=p.owner_id WHERE p.id=?`,
     [id],
   );
   if (!p) throw AppError.notFound('Oportunidade nao encontrada.');
@@ -119,6 +119,21 @@ async function mutateWork<T>(actor: number, id: number, fn: (w: Row) => Promise<
   });
 }
 const hideBlocked = `NOT EXISTS(SELECT 1 FROM market_blocks b WHERE (b.user_id=? AND b.target_id=p.owner_id) OR (b.target_id=? AND b.user_id=p.owner_id))`;
+const approvedPost = `EXISTS(SELECT 1 FROM market_content_reviews cr WHERE cr.target_type='post' AND cr.target_id=p.id AND cr.state='approved')`;
+const approvedProfile = `EXISTS(SELECT 1 FROM market_content_reviews cr WHERE cr.target_type='profile' AND cr.target_id=p.user_id AND cr.state='approved')`;
+async function queueContent(type: 'post' | 'profile', target: number, owner: number) {
+  await execute(`INSERT INTO market_content_reviews(target_type,target_id,owner_id) VALUES(?,?,?)
+    ON DUPLICATE KEY UPDATE state='pending',revision=revision+1,note='',moderator_id=NULL`, [type,target,owner]);
+}
+async function reviewState(type: 'post' | 'profile', target: number) {
+  return await row('SELECT state,revision,note FROM market_content_reviews WHERE target_type=? AND target_id=?', [type,target])
+    ?? { state: 'pending', revision: 0, note: '' };
+}
+async function acceptPostRules(id: number, accepted?: boolean) {
+  if (accepted) await execute(`INSERT INTO market_preferences(user_id,consent_version,consent_at) VALUES(?,?,UTC_TIMESTAMP())
+    ON DUPLICATE KEY UPDATE consent_version=VALUES(consent_version),consent_at=VALUES(consent_at)`, [id,RULES_VERSION]);
+  await consent(id);
+}
 export const marketService = {
   async me(id: number) {
     const [preferences, profile, p] = await Promise.all([
@@ -131,8 +146,9 @@ export const marketService = {
       [id, month() + '-01', id, month() + '-01', id, month()],
     );
     return {
+      accountId: id,
       preferences,
-      profile: profile ? publicProfile(profile) : null,
+      profile: profile ? { ...publicProfile(profile), moderation: await reviewState('profile', id) } : null,
       plan: p,
       usage,
       rulesVersion: RULES_VERSION,
@@ -157,8 +173,10 @@ export const marketService = {
   },
   async saveProfile(id: number, input: ProfileInput) {
     await active(id);
-    if (input.published) await consent(id);
+    if (input.published) await acceptPostRules(id, input.acceptRules);
     const photo = input.photo ? cleanImage(input.photo) : null;
+    return withTransaction(async () => {
+    await lockUsers(id);
     await execute(
       `INSERT INTO market_profiles(user_id,name,photo,city,region,latitude,longitude,skills,services,experience,bio,price_from,price_to,availability,radius_km,mode,published) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE name=VALUES(name),photo=VALUES(photo),city=VALUES(city),region=VALUES(region),latitude=VALUES(latitude),longitude=VALUES(longitude),skills=VALUES(skills),services=VALUES(services),experience=VALUES(experience),bio=VALUES(bio),price_from=VALUES(price_from),price_to=VALUES(price_to),availability=VALUES(availability),radius_km=VALUES(radius_km),mode=VALUES(mode),published=VALUES(published)`,
       [
@@ -181,7 +199,9 @@ export const marketService = {
         input.published ? 1 : 0,
       ],
     );
+    await queueContent('profile', id, id);
     return marketService.me(id);
+    });
   },
   async profile(viewer: number, id: number) {
     if (viewer !== id) {
@@ -189,7 +209,7 @@ export const marketService = {
       await active(id);
     }
     const p = await row('SELECT * FROM market_profiles WHERE user_id=?', [id]);
-    if (!p || (!p.published && viewer !== id)) throw AppError.notFound('Perfil profissional indisponivel.');
+    if (!p || (viewer !== id && (!p.published || (await reviewState('profile', id)).state !== 'approved'))) throw AppError.notFound('Perfil profissional indisponível.');
     const stats = await row(
       `SELECT (SELECT COUNT(*) FROM market_works WHERE professional_id=? AND status='concluido') completed, (SELECT COUNT(*) FROM market_reviews WHERE target_id=? AND hidden=0) reviews, (SELECT AVG(stars) FROM market_reviews WHERE target_id=? AND hidden=0) rating`,
       [id, id, id],
@@ -203,7 +223,7 @@ export const marketService = {
   async professionals(viewer: number, search: string, page: number) {
     return {
       profiles: await rows(
-        `SELECT p.user_id,p.name,p.city,p.region,p.skills,p.bio,p.price_from,p.price_to,p.mode,(SELECT AVG(stars) FROM market_reviews WHERE target_id=p.user_id AND hidden=0) rating FROM market_profiles p WHERE p.published=1 AND NOT EXISTS(SELECT 1 FROM market_suspensions WHERE user_id=p.user_id) AND NOT EXISTS(SELECT 1 FROM market_blocks b WHERE (b.user_id=? AND b.target_id=p.user_id) OR (b.target_id=? AND b.user_id=p.user_id)) AND (p.name LIKE ? OR p.skills LIKE ? OR p.city LIKE ?) ORDER BY p.updated_at DESC LIMIT 20 OFFSET ?`,
+        `SELECT p.user_id,p.name,p.city,p.region,p.skills,p.bio,p.price_from,p.price_to,p.mode,(SELECT AVG(stars) FROM market_reviews WHERE target_id=p.user_id AND hidden=0) rating FROM market_profiles p WHERE p.published=1 AND ${approvedProfile} AND NOT EXISTS(SELECT 1 FROM market_suspensions WHERE user_id=p.user_id) AND NOT EXISTS(SELECT 1 FROM market_blocks b WHERE (b.user_id=? AND b.target_id=p.user_id) OR (b.target_id=? AND b.user_id=p.user_id)) AND (p.name LIKE ? OR p.skills LIKE ? OR p.city LIKE ?) ORDER BY p.updated_at DESC LIMIT 20 OFFSET ?`,
         [viewer, viewer, '%' + search + '%', '%' + search + '%', '%' + search + '%', (page - 1) * 20],
       ),
     };
@@ -212,6 +232,7 @@ export const marketService = {
     viewer: number,
     f: {
       category?: string;
+      search?: string;
       mode?: string;
       city?: string;
       min?: number;
@@ -230,8 +251,12 @@ export const marketService = {
       ? 'ROUND(6371*2*ASIN(SQRT(LEAST(1,POW(SIN(RADIANS(p.latitude-?)/2),2)+COS(RADIANS(?))*COS(RADIANS(p.latitude))*POW(SIN(RADIANS(p.longitude-?)/2),2)))),1)'
       : 'NULL';
     const values: any[] = hasOrigin ? [origin.latitude, origin.latitude, origin.longitude] : [];
-    let where = `p.status='aberta' AND p.hidden=0 AND p.owner_id<>? AND (p.due_date IS NULL OR p.due_date>=UTC_DATE()) AND NOT EXISTS(SELECT 1 FROM market_suspensions WHERE user_id=p.owner_id) AND ${hideBlocked}`;
-    values.push(viewer, viewer, viewer);
+    let where = `p.status='aberta' AND p.hidden=0 AND ${approvedPost} AND (p.due_date IS NULL OR p.due_date>=UTC_DATE()) AND NOT EXISTS(SELECT 1 FROM market_suspensions WHERE user_id=p.owner_id) AND ${hideBlocked}`;
+    values.push(viewer, viewer);
+    if (f.search) {
+      where += ' AND (p.title LIKE ? OR p.description LIKE ?)';
+      values.push('%' + f.search + '%', '%' + f.search + '%');
+    }
     for (const [key, val] of [
       ['category', f.category],
       ['mode', f.mode],
@@ -256,7 +281,7 @@ export const marketService = {
       where += ' AND p.due_date<=?';
       values.push(f.date);
     }
-    let sql = `SELECT p.id,p.owner_id,p.title,p.category,p.city,p.region,p.mode,p.budget_from,p.budget_to,p.due_date,p.created_at,${distance} distance_km FROM market_posts p WHERE ${where}`;
+    let sql = `SELECT p.id,p.owner_id,p.title,p.category,p.city,p.region,p.mode,p.budget_from,p.budget_to,p.due_date,p.created_at,JSON_UNQUOTE(JSON_EXTRACT(p.photos,'$[0]')) thumbnail,${distance} distance_km FROM market_posts p WHERE ${where}`;
     if (f.distance) {
       sql += ' HAVING distance_km IS NOT NULL AND distance_km<=?';
       values.push(f.distance);
@@ -266,13 +291,15 @@ export const marketService = {
     sql += ' LIMIT 20 OFFSET ?';
     values.push((f.page - 1) * 20);
     return {
-      posts: (await rows(sql, values)).map((p) => ({ ...p, due_date: p.due_date ? date(p.due_date) : null })),
+      posts: (await rows(sql, values)).map((p) => ({ ...p, mine: p.owner_id === viewer, due_date: p.due_date ? date(p.due_date) : null })),
       page: f.page,
     };
   },
   async post(viewer: number, id: number) {
     const p = await postById(id);
     const mine = p.owner_id === viewer;
+    const moderation = await reviewState('post', id);
+    if (!mine && (p.hidden || moderation.state !== 'approved')) throw AppError.notFound('Oportunidade indisponível.');
     const work = await row('SELECT id,customer_id,professional_id FROM market_works WHERE post_id=?', [id]);
     const participant = work && [work.customer_id, work.professional_id].includes(viewer);
     if (!mine && !participant) {
@@ -301,10 +328,11 @@ export const marketService = {
           [id],
         )
       : await rows('SELECT * FROM market_proposals WHERE post_id=? AND professional_id=?', [id, viewer]);
-    return { post: postData(p), proposals: offers, workId: participant ? work!.id : null };
+    const metrics = mine ? await row(`SELECT COUNT(DISTINCT user_id) view_count FROM market_views WHERE post_id=? AND user_id<>?`, [id,viewer]) : null;
+    return { post: { ...postData(p), ...(mine ? { moderation, ...metrics } : {}) }, proposals: offers, workId: participant ? work!.id : null };
   },
   async createPost(id: number, input: PostInput) {
-    await consent(id);
+    await acceptPostRules(id, input.acceptRules);
     await billingService.sync(id);
     const photos = input.photos.map(cleanImage);
     return withTransaction(async () => {
@@ -328,7 +356,22 @@ export const marketService = {
           JSON.stringify(photos),
         ],
       );
-      return { id: result.insertId };
+      await queueContent('post', result.insertId, id);
+      return { id: result.insertId, moderation: 'pending' };
+    });
+  },
+  async editPost(actor: number, id: number, input: PostInput) {
+    await acceptPostRules(actor, input.acceptRules);
+    const photos = input.photos.map(cleanImage);
+    return withTransaction(async () => {
+      await lockUsers(actor);
+      const p = await row('SELECT * FROM market_posts WHERE id=? FOR UPDATE', [id]);
+      if (!p || p.owner_id !== actor) throw AppError.notFound('Publicação não encontrada.');
+      if (p.status !== 'aberta' || p.hidden) throw AppError.conflict('Esta publicação não pode ser editada.');
+      await execute(`UPDATE market_posts SET title=?,category=?,description=?,city=?,region=?,latitude=?,longitude=?,mode=?,budget_from=?,budget_to=?,due_date=?,photos=? WHERE id=?`,
+        [input.title,input.category,input.description,input.city,input.region,approx(input.latitude),approx(input.longitude),input.mode,input.budgetFrom,input.budgetTo,input.dueDate,JSON.stringify(photos),id]);
+      await queueContent('post', id, actor);
+      return { id, moderation: 'pending' };
     });
   },
   async cancelPost(actor: number, id: number) {
@@ -356,11 +399,14 @@ export const marketService = {
       throw AppError.badRequest('Publique seu perfil profissional antes de enviar uma proposta.');
     return withTransaction(async () => {
       await lockUsers(actor);
+      if ((await reviewState('profile', actor)).state !== 'approved')
+        throw AppError.conflict('Seu perfil precisa ser aprovado antes de enviar propostas.');
       const current = await row('SELECT * FROM market_posts WHERE id=? FOR UPDATE', [id]);
       if (
         !current ||
         current.status !== 'aberta' ||
         current.hidden ||
+        (await reviewState('post', id)).state !== 'approved' ||
         (current.due_date && date(current.due_date) < new Date().toISOString().slice(0, 10))
       )
         throw AppError.conflict('Esta oportunidade nao aceita novas propostas.');
@@ -405,7 +451,7 @@ export const marketService = {
         if (existing.proposal_id === id) return { id: existing.id };
         throw AppError.conflict('Outro profissional ja foi escolhido.');
       }
-      if (!p || p.status !== 'aberta' || p.hidden || !a || a.status !== 'enviada')
+      if (!p || p.status !== 'aberta' || p.hidden || (await reviewState('post', p.id)).state !== 'approved' || !a || a.status !== 'enviada')
         throw AppError.conflict('Proposta indisponivel.');
       if (date(a.due_date) < new Date().toISOString().slice(0, 10))
         throw AppError.conflict('O prazo desta proposta ja passou.');
@@ -423,11 +469,16 @@ export const marketService = {
   },
   async mine(id: number) {
     return {
-      posts: (await rows('SELECT * FROM market_posts WHERE owner_id=? ORDER BY id DESC LIMIT 100', [id])).map(
+      posts: (await rows(`SELECT p.*,cr.state moderation_state,cr.note moderation_note,
+        (SELECT COUNT(DISTINCT v.user_id) FROM market_views v WHERE v.post_id=p.id AND v.user_id<>p.owner_id) view_count,
+        (SELECT COUNT(*) FROM market_proposals a WHERE a.post_id=p.id) proposal_count,
+        JSON_UNQUOTE(JSON_EXTRACT(p.photos,'$[0]')) thumbnail
+        FROM market_posts p LEFT JOIN market_content_reviews cr ON cr.target_type='post' AND cr.target_id=p.id
+        WHERE p.owner_id=? ORDER BY p.id DESC LIMIT 100`, [id])).map(
         (p) => ({ ...postData(p), photos: undefined }),
       ),
       proposals: await rows(
-        'SELECT a.*,p.title,p.status post_status FROM market_proposals a JOIN market_posts p ON p.id=a.post_id WHERE a.professional_id=? ORDER BY a.id DESC LIMIT 100',
+        `SELECT a.*,IF(p.hidden=0 AND ${approvedPost},p.title,'Publicação indisponível ou em análise') title,p.status post_status,(p.hidden=0 AND ${approvedPost}) post_visible FROM market_proposals a JOIN market_posts p ON p.id=a.post_id WHERE a.professional_id=? ORDER BY a.id DESC LIMIT 100`,
         [id],
       ),
       works: await rows(
@@ -678,9 +729,45 @@ export const marketService = {
   async moderation(actor: number) {
     if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
     return {
+      queue: await rows(`SELECT cr.*,IF(cr.target_type='post',p.title,mp.name) title
+        FROM market_content_reviews cr LEFT JOIN market_posts p ON cr.target_type='post' AND p.id=cr.target_id
+        LEFT JOIN market_profiles mp ON cr.target_type='profile' AND mp.user_id=cr.target_id
+        WHERE cr.state='pending' AND ((cr.target_type='post' AND p.status='aberta' AND p.hidden=0)
+          OR (cr.target_type='profile' AND mp.published=1))
+        AND NOT EXISTS(SELECT 1 FROM market_suspensions s WHERE s.user_id=cr.owner_id)
+        ORDER BY cr.updated_at,cr.target_id LIMIT 100`),
       reports: await rows("SELECT * FROM market_reports ORDER BY status='aberta' DESC,id DESC LIMIT 100"),
       suspensions: await rows('SELECT s.*,u.name FROM market_suspensions s JOIN users u ON u.id=s.user_id'),
     };
+  },
+  async reviewContent(actor: number, type: 'post' | 'profile', id: number) {
+    if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito à moderação.');
+    return withTransaction(async () => {
+      const owner = await row('SELECT owner_id FROM market_content_reviews WHERE target_type=? AND target_id=?', [type,id]);
+      if (!owner) throw AppError.notFound('Conteúdo não encontrado.');
+      await lockUsers(owner.owner_id);
+      const review = await reviewState(type,id);
+      const content = await row(type === 'post' ? 'SELECT * FROM market_posts WHERE id=?' : 'SELECT * FROM market_profiles WHERE user_id=?', [id]);
+      return { type, id, review, content };
+    });
+  },
+  async decideContent(actor: number, type: 'post' | 'profile', id: number, input: { revision: number; action: 'approved' | 'rejected'; note: string }) {
+    if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito à moderação.');
+    return withTransaction(async () => {
+      const initial = await row('SELECT owner_id FROM market_content_reviews WHERE target_type=? AND target_id=?', [type,id]);
+      if (!initial) throw AppError.notFound('Conteúdo não encontrado.');
+      await lockUsers(initial.owner_id);
+      await active(initial.owner_id);
+      const review = await row('SELECT * FROM market_content_reviews WHERE target_type=? AND target_id=? FOR UPDATE', [type,id]);
+      if (!review || review.state !== 'pending' || review.revision !== input.revision)
+        throw AppError.conflict('O conteúdo foi alterado ou já foi analisado. Reabra antes de decidir.');
+      const content = await row(type === 'post' ? 'SELECT * FROM market_posts WHERE id=? FOR UPDATE' : 'SELECT * FROM market_profiles WHERE user_id=? FOR UPDATE', [id]);
+      if (!content || (type === 'post' ? content.hidden || content.status !== 'aberta' : !content.published))
+        throw AppError.conflict('Este conteúdo não está mais disponível para publicação.');
+      await execute('UPDATE market_content_reviews SET state=?,note=?,moderator_id=? WHERE target_type=? AND target_id=?', [input.action,input.note,actor,type,id]);
+      await execute('INSERT INTO market_content_decisions(target_type,target_id,revision,decision,note,moderator_id) VALUES(?,?,?,?,?,?)', [type,id,input.revision,input.action,input.note,actor]);
+      return { state: input.action };
+    });
   },
   async reportContent(actor: number, id: number) {
     if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
@@ -779,7 +866,7 @@ export const marketService = {
   },
   async summary(actor: number) {
     const counts = await row(
-      `SELECT (SELECT COUNT(*) FROM market_posts p WHERE p.status='aberta' AND p.hidden=0 AND p.owner_id<>? AND (p.due_date IS NULL OR p.due_date>=UTC_DATE()) AND NOT EXISTS(SELECT 1 FROM market_suspensions WHERE user_id=p.owner_id) AND ${hideBlocked}) available,(SELECT COUNT(*) FROM market_proposals WHERE professional_id=? AND status='enviada') proposals,(SELECT COUNT(*) FROM market_works WHERE (customer_id=? OR professional_id=?) AND status='andamento') active,(SELECT COUNT(*) FROM market_works WHERE professional_id=? AND status='concluido') completed`,
+      `SELECT (SELECT COUNT(*) FROM market_posts p WHERE p.status='aberta' AND p.hidden=0 AND ${approvedPost} AND p.owner_id<>? AND (p.due_date IS NULL OR p.due_date>=UTC_DATE()) AND NOT EXISTS(SELECT 1 FROM market_suspensions WHERE user_id=p.owner_id) AND ${hideBlocked}) available,(SELECT COUNT(*) FROM market_proposals WHERE professional_id=? AND status='enviada') proposals,(SELECT COUNT(*) FROM market_works WHERE (customer_id=? OR professional_id=?) AND status='andamento') active,(SELECT COUNT(*) FROM market_works WHERE professional_id=? AND status='concluido') completed`,
       [actor, actor, actor, actor, actor, actor, actor],
     );
     return {

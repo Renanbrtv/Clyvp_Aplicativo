@@ -1,5 +1,5 @@
 import { z } from 'zod';
-export const RULES_VERSION = 'mercado-2026-10-v1';
+export const RULES_VERSION = 'mercado-2026-10-v2';
 export const categories = [
   'Tecnico de informatica',
   'Manutencao de celular',
@@ -27,7 +27,7 @@ export const day = z
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .refine(
     (s) => !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s,
-    'Data invalida',
+    'Escolha uma data válida no calendário.',
   );
 export const imageData = z
   .string()
@@ -56,6 +56,7 @@ export const profileSchema = z
     radiusKm: z.number().int().min(1).max(1000),
     mode: z.enum(['presencial', 'remoto', 'ambos']),
     published: z.boolean(),
+    acceptRules: z.boolean().optional(),
   })
   .strict()
   .refine(validLocation, 'Informe as duas coordenadas ou nenhuma.')
@@ -75,10 +76,11 @@ export const postSchema = z
     budgetTo: money.nullable(),
     dueDate: day.nullable(),
     photos: z.array(imageData).max(2),
+    acceptRules: z.boolean().optional(),
   })
   .strict()
   .refine(validLocation, 'Informe as duas coordenadas ou nenhuma.')
-  .refine((v) => v.mode === 'remoto' || v.city.length > 0, 'Informe a cidade')
+  .refine((v) => v.mode === 'remoto' || v.city.length > 0, { message: 'Informe a cidade.', path: ['city'] })
   .refine(
     (v) => v.budgetFrom === null || v.budgetTo === null || v.budgetTo >= v.budgetFrom,
     'Orcamento invalido',

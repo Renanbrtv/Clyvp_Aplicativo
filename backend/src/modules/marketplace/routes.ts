@@ -67,6 +67,7 @@ router.get(
 );
 const list = z
   .object({
+    search: z.string().trim().max(100).optional(),
     category: z.string().max(80).optional(),
     mode: z.enum(['presencial', 'remoto']).optional(),
     city: z.string().max(100).optional(),
@@ -95,6 +96,7 @@ router.get(
   '/posts/:id',
   run((uid, r) => s.post(uid, id(r.params.id))),
 );
+router.post('/posts/:id/edit', validate(postSchema), run((uid, r) => s.editPost(uid, id(r.params.id), r.body)));
 router.post(
   '/posts/:id/cancel',
   run((uid, r) => s.cancelPost(uid, id(r.params.id))),
@@ -184,6 +186,11 @@ router.get(
   '/moderation/:id',
   run((uid, r) => s.reportContent(uid, id(r.params.id))),
 );
+const contentType = (value: unknown) => z.enum(['post', 'profile']).parse(value);
+router.get('/moderation/content/:type/:id', run((uid,r) => s.reviewContent(uid, contentType(r.params.type), id(r.params.id))));
+router.post('/moderation/content/:type/:id',
+  validate(z.object({ revision: z.number().int().positive(), action: z.enum(['approved','rejected']), note: z.string().trim().min(5).max(450) }).strict()),
+  run((uid,r) => s.decideContent(uid, contentType(r.params.type), id(r.params.id), r.body)));
 router.post(
   '/moderation/:id/resolve',
   validate(

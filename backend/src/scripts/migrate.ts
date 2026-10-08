@@ -48,6 +48,8 @@ async function main(): Promise<void> {
       await connection.query(schema);
       const marketplacePath = path.join(path.dirname(schemaPath), 'marketplace.sql');
       if (fs.existsSync(marketplacePath)) await connection.query(fs.readFileSync(marketplacePath, 'utf8'));
+      const moderationPath = path.join(path.dirname(schemaPath), 'marketplace-moderation.sql');
+      if (fs.existsSync(moderationPath)) await connection.query(fs.readFileSync(moderationPath, 'utf8'));
 
       await connection.query(`USE \`${env.DB_NAME}\``);
       const [tables] = await connection.query<any[]>('SHOW TABLES');

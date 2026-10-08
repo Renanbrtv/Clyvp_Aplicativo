@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../src/features/auth/auth-context';
+import { categoryLabel } from '../../src/features/marketplace/ui';
+import { DateField } from '../../src/features/marketplace/DateField';
+import { moderationLabel } from '../../src/features/marketplace/PostCard';
 import {
   api,
   Button,
@@ -38,7 +41,7 @@ export default function Opportunity() {
           <Card>
             <Text style={styles.title}>{p.title}</Text>
             <Note>
-              {p.category} · {p.status}
+              {categoryLabel(p.category)} · {p.status}
             </Note>
             <Note>
               {p.mode === 'remoto' ? 'Remoto' : `${p.city} / ${p.region}`} · {prettyDay(p.due_date)}
@@ -68,9 +71,16 @@ export default function Opportunity() {
           <Feedback action={a} />
           {mine ? (
             <>
+              <Card>
+                <Text style={styles.title}>{p.hidden ? 'Removido pela moderação' : moderationLabel(p.moderation?.state)}</Text>
+                {p.moderation?.state === 'pending' ? <Note>Sua publicação está em análise. Ela ainda não aparece para outras pessoas.</Note> : null}
+                {p.moderation?.note ? <Note>Mensagem da equipe: {p.moderation.note}</Note> : null}
+                <Note>{p.view_count ?? 0} pessoas visualizaram · {d.data.proposals.length} propostas recebidas</Note>
+                {p.status === 'aberta' && !p.hidden ? <Button label="Editar publicação" variant="outline" onPress={() => router.push(('/mercado/publicar?id='+id) as any)} /> : null}
+              </Card>
               <Text style={styles.title}>Propostas recebidas</Text>
               {!d.data.proposals.length ? (
-                <Note>Ainda nao ha propostas. Elas aparecerao aqui quando profissionais responderem.</Note>
+                <Note>Ainda não há propostas. Elas aparecerão aqui quando profissionais responderem.</Note>
               ) : null}
               {d.data.proposals.map((o: any) => (
                 <Card key={o.id}>
@@ -85,10 +95,10 @@ export default function Opportunity() {
                     variant="ghost"
                     onPress={() => router.push(`/mercado/perfil-profissional?id=${o.professional_id}` as any)}
                   />
-                  {p.status === 'aberta' && o.status === 'enviada' ? (
+                  {p.status === 'aberta' && !p.hidden && p.moderation?.state === 'approved' && o.status === 'enviada' ? (
                     <Confirm
                       label="Escolher profissional"
-                      description={`Aceitar proposta de ${currency(o.amount)} para ${prettyDay(o.due_date)}? Isso cria um trabalho e uma conversa privada. Nao realiza pagamento.`}
+                      description={`Aceitar proposta de ${currency(o.amount)} para ${prettyDay(o.due_date)}? Isso cria um trabalho e uma conversa privada. Não realiza pagamento.`}
                       disabled={a.busy}
                       onConfirm={() =>
                         void a.run(async () => {
@@ -103,7 +113,7 @@ export default function Opportunity() {
               {p.status === 'aberta' ? (
                 <Confirm
                   label="Encerrar oportunidade"
-                  description="Encerrar esta publicacao e recusar as propostas ainda pendentes?"
+                  description="Encerrar esta publicação e recusar as propostas ainda pendentes?"
                   disabled={a.busy}
                   onConfirm={() => void a.run(() => api.post(`/market/posts/${id}/cancel`, {}))}
                 />
@@ -122,7 +132,7 @@ export default function Opportunity() {
                     {o.status === 'enviada' ? (
                       <Confirm
                         label="Retirar proposta"
-                        description="Retirar sua proposta? A cota mensal usada nao sera devolvida."
+                        description="Retirar sua proposta? A cota mensal usada não será devolvida."
                         disabled={a.busy}
                         onConfirm={() => void a.run(() => api.post(`/market/proposals/${o.id}/withdraw`, {}))}
                       />
@@ -131,7 +141,7 @@ export default function Opportunity() {
                 ))
               ) : p.status === 'aberta' ? (
                 <Card>
-                  <Text style={styles.title}>Tenho interesse neste servico</Text>
+                  <Text style={styles.title}>Tenho interesse neste serviço</Text>
                   <Note>Publique seu perfil profissional e aceite as regras antes de propor.</Note>
                   <Field
                     label="Valor da proposta (R$)"
@@ -139,11 +149,11 @@ export default function Opportunity() {
                     value={price}
                     onChangeText={setPrice}
                   />
-                  <Field
-                    label="Prazo (AAAA-MM-DD)"
+                  <DateField
+                    label="Prazo do serviço"
                     value={due}
-                    onChangeText={setDue}
-                    placeholder="2026-12-20"
+                    onChange={setDue}
+                    optional={false}
                   />
                   <Field
                     label="Mensagem da proposta"
@@ -153,7 +163,7 @@ export default function Opportunity() {
                     onChangeText={setMessage}
                   />
                   <Field
-                    label="Experiencia relacionada"
+                    label="Experiência relacionada"
                     multiline
                     maxLength={1200}
                     value={experience}
@@ -171,7 +181,7 @@ export default function Opportunity() {
                             message,
                             experience,
                           }),
-                        'Proposta enviada. Acompanhe em Minhas propostas.',
+                        'Proposta enviada. Acompanhe em Propostas enviadas.',
                       )
                     }
                   />
@@ -188,8 +198,8 @@ export default function Opportunity() {
                 onPress={() => router.push(`/mercado/denunciar?type=post&id=${id}` as any)}
               />
               <Confirm
-                label="Bloquear este usuario"
-                description="Ocultar oportunidades deste usuario e impedir novas interacoes entre voces?"
+                label="Bloquear este usuário"
+                description="Ocultar oportunidades deste usuário e impedir novas interações entre vocês?"
                 disabled={a.busy}
                 onConfirm={() =>
                   void a.run(async () => {
@@ -201,7 +211,7 @@ export default function Opportunity() {
             </>
           )}
           <Button
-            label="Minhas propostas e trabalhos"
+            label="Minhas publicações, propostas e trabalhos"
             variant="outline"
             onPress={() => router.push('/mercado/minhas')}
           />

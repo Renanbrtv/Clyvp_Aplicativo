@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../src/features/auth/auth-context';
+import { categoryLabel } from '../../src/features/marketplace/ui';
+import { RulesConsent } from '../../src/features/marketplace/RulesConsent';
+import { moderationLabel } from '../../src/features/marketplace/PostCard';
 import {
   api,
   MarketScreen,
@@ -49,6 +52,7 @@ export default function PerfilProfissional() {
   const own = !id || Number(id) === user?.id;
   const { data, loading, error, load } = useData(own ? '/market/me' : `/market/profiles/${id}`);
   const action = useAction(load),
+    [accepted, setAccepted] = useState(false),
     [form, setForm] = useState(blank),
     [custom, setCustom] = useState('');
   const set = (key: string, value: any) => setForm((v) => ({ ...v, [key]: value }));
@@ -77,8 +81,10 @@ export default function PerfilProfissional() {
     else set('name', user?.name ?? '');
   }, [data, own]);
   async function save() {
+    if (form.published && !accepted) throw new Error('Leia e aceite as regras abaixo antes de publicar.');
     await api.post('/market/profile', {
       ...form,
+      acceptRules: accepted,
       latitude: coordinate(form.latitude),
       longitude: coordinate(form.longitude),
       priceFrom: amount(form.priceFrom),
@@ -97,23 +103,17 @@ export default function PerfilProfissional() {
         <>
           {data?.stats ? (
             <Card>
-              <Text style={styles.title}>Sua reputacao</Text>
+              <Text style={styles.title}>Sua reputação</Text>
               <Note>
                 {data.stats.rating
                   ? Number(data.stats.rating).toFixed(1) + ' de 5 estrelas'
-                  : 'Ainda sem avaliacoes'}{' '}
-                · {data.stats.reviews} avaliacoes · {data.stats.completed} servicos concluidos
+                  : 'Ainda sem avaliações'}{' '}
+                · {data.stats.reviews} avaliações · {data.stats.completed} serviços concluídos
               </Note>
             </Card>
           ) : null}
-          <Note>Mostre o que voce sabe fazer. O perfil so fica visivel quando voce escolher publicar.</Note>
-          {data?.preferences?.consent_version !== data?.rulesVersion ? (
-            <Button
-              label="Definir objetivo e aceitar regras"
-              variant="outline"
-              onPress={() => router.push('/mercado/comecar')}
-            />
-          ) : null}
+          <Note>Mostre o que você sabe fazer. Seu perfil e sua foto ficam visíveis após aprovação. Cada alteração passa por nova análise.</Note>
+          {data?.profile?.published ? <Note>{moderationLabel(data.profile.moderation?.state)} {data.profile.moderation?.note ? '· '+data.profile.moderation.note : ''}</Note> : null}
           <Field
             label="Nome profissional"
             value={form.name}
@@ -123,7 +123,7 @@ export default function PerfilProfissional() {
           <Picture value={form.photo} onChange={(v) => set('photo', v)} />
           <Field label="Cidade" value={form.city} onChangeText={(v) => set('city', v)} />
           <Field
-            label="Regiao / bairro (sem endereco exato)"
+            label="Região / bairro (sem endereço exato)"
             value={form.region}
             onChangeText={(v) => set('region', v)}
           />
@@ -145,21 +145,21 @@ export default function PerfilProfissional() {
             }}
           />
           <Field
-            label="Servicos que ofereco"
+            label="Serviços que ofereço"
             value={form.services}
             onChangeText={(v) => set('services', v)}
             multiline
             maxLength={1500}
           />
           <Field
-            label="Minha experiencia"
+            label="Minha experiência"
             value={form.experience}
             onChangeText={(v) => set('experience', v)}
             multiline
             maxLength={1500}
           />
           <Field
-            label="Descricao profissional"
+            label="Descrição profissional"
             value={form.bio}
             onChangeText={(v) => set('bio', v)}
             multiline
@@ -172,14 +172,14 @@ export default function PerfilProfissional() {
             onChange={(v) => set('mode', v)}
           />
           <Field
-            label="Preco inicial (R$, opcional)"
+            label="Preço inicial (R$, opcional)"
             value={form.priceFrom}
             onChangeText={(v) => set('priceFrom', v)}
             keyboardType="decimal-pad"
             placeholder="100,00"
           />
           <Field
-            label="Preco maximo (R$, opcional)"
+            label="Preço máximo (R$, opcional)"
             value={form.priceTo}
             onChangeText={(v) => set('priceTo', v)}
             keyboardType="decimal-pad"
@@ -191,40 +191,23 @@ export default function PerfilProfissional() {
             placeholder="Dias de semana, depois das 18h"
           />
           <Field
-            label="Distancia maxima de atendimento (km)"
+            label="Distância máxima de atendimento (km)"
             value={form.radiusKm}
             onChangeText={(v) => set('radiusKm', v)}
             keyboardType="numeric"
           />
-          <Card style={styles.card}>
-            <Note>
-              Para ver distancias, informe um ponto aproximado do seu bairro. E opcional. As coordenadas sao
-              arredondadas; nao informe a localizacao exata da sua casa.
-            </Note>
-            <Field
-              label="Latitude aproximada (opcional)"
-              value={form.latitude}
-              onChangeText={(v) => set('latitude', v)}
-              placeholder="-16,68"
-            />
-            <Field
-              label="Longitude aproximada (opcional)"
-              value={form.longitude}
-              onChangeText={(v) => set('longitude', v)}
-              placeholder="-49,25"
-            />
-          </Card>
           <Choices
             label="Visibilidade"
-            options={['Rascunho privado', 'Publicado no marketplace']}
-            value={form.published ? 'Publicado no marketplace' : 'Rascunho privado'}
-            onChange={(v) => set('published', v === 'Publicado no marketplace')}
+            options={['Rascunho privado', 'Enviar para publicação']}
+            value={form.published ? 'Enviar para publicação' : 'Rascunho privado'}
+            onChange={(v) => set('published', v === 'Enviar para publicação')}
           />
+          {form.published ? <RulesConsent value={accepted} onChange={setAccepted} /> : null}
           <Feedback action={action} />
           <Button
             label="Salvar perfil profissional"
             loading={action.busy}
-            onPress={() => void action.run(save, 'Perfil salvo.')}
+            onPress={() => void action.run(save, form.published ? 'Perfil enviado para análise. Acompanhe o status nesta tela.' : 'Rascunho salvo.')}
           />
         </>
       ) : data ? (
@@ -242,29 +225,29 @@ export default function PerfilProfissional() {
             </Note>
             <Note>
               {data.stats.rating ? `${Number(data.stats.rating).toFixed(1)} de 5 estrelas` : 'Ainda sem nota'}{' '}
-              · {data.stats.reviews} avaliacoes · {data.stats.completed} servicos concluidos
+              · {data.stats.reviews} avaliações · {data.stats.completed} serviços concluídos
             </Note>
             <Note>{data.profile.bio}</Note>
-            <Note>Habilidades: {data.profile.skills.join(', ')}</Note>
-            <Note>Servicos: {data.profile.services}</Note>
-            <Note>Experiencia: {data.profile.experience || 'Nao informada'}</Note>
+            <Note>Habilidades: {data.profile.skills.map(categoryLabel).join(', ')}</Note>
+            <Note>Serviços: {data.profile.services}</Note>
+            <Note>Experiência: {data.profile.experience || 'Não informada'}</Note>
             <Note>Disponibilidade: {data.profile.availability || 'A combinar'}</Note>
             <Note>Raio de atendimento: {data.profile.radius_km} km</Note>
             <Note>
-              Preco inicial:{' '}
+              Preço inicial:{' '}
               {data.profile.price_from != null ? currency(data.profile.price_from) : 'A combinar'}
             </Note>
           </Card>
-          <Button label="Publicar um pedido de servico" onPress={() => router.push('/mercado/publicar')} />
-          <Note>A conexao e a conversa sao liberadas quando uma proposta e aceita.</Note>
+          <Button label="Publicar um pedido de serviço" onPress={() => router.push('/mercado/publicar')} />
+          <Note>A conexão e a conversa são liberadas quando uma proposta é aceita.</Note>
           {data.reviews.map((r: any) => (
             <Card key={r.id} style={styles.card}>
               <Text style={styles.label}>
                 {r.stars}/5 · {r.author_name}
               </Text>
-              <Note>{r.comment || 'Sem comentario.'}</Note>
+              <Note>{r.comment || 'Sem comentário.'}</Note>
               <Button
-                label="Denunciar avaliacao"
+                label="Denunciar avaliação"
                 variant="ghost"
                 onPress={() => router.push(`/mercado/denunciar?type=review&id=${r.id}`)}
               />
@@ -276,13 +259,13 @@ export default function PerfilProfissional() {
             onPress={() => router.push(`/mercado/denunciar?type=user&id=${id}`)}
           />
           <Button
-            label="Bloquear este usuario"
+            label="Bloquear este usuário"
             variant="ghost"
             onPress={() =>
               void action.run(async () => {
                 await api.post('/market/blocks', { targetId: Number(id), enabled: true });
                 router.replace('/mercado');
-              }, 'Usuario bloqueado.')
+              }, 'Usuário bloqueado.')
             }
           />
           <Feedback action={action} />

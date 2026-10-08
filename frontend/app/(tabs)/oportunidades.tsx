@@ -21,6 +21,8 @@ import {
 } from '../../src/shared/components';
 import { theme, useThemeMode, createThemedStyles } from '../../src/shared/theme';
 import { currency, relativeDays } from '../../src/shared/utils/format';
+import Mercado from '../mercado/index';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type StatusFilter = 'abertas' | 'novo_contato' | 'proposta_enviada' | 'negociacao' | 'aguardando_pagamento' | 'fechado' | 'perdido';
 
@@ -28,7 +30,7 @@ const FILTERS: Array<ChipOption<StatusFilter>> = [
   { value: 'abertas', label: 'Em aberto' },
   { value: 'novo_contato', label: 'Novo contato' },
   { value: 'proposta_enviada', label: 'Proposta enviada' },
-  { value: 'negociacao', label: 'Negociacao' },
+  { value: 'negociacao', label: 'Negociação' },
   { value: 'aguardando_pagamento', label: 'Aguardando pagamento' },
   { value: 'fechado', label: 'Fechados' },
   { value: 'perdido', label: 'Perdidos' },
@@ -44,6 +46,18 @@ const STATUS_TONE: Record<string, 'semResposta' | 'recorrente' | 'novoCliente' |
 };
 
 export default function OportunidadesScreen() {
+  useThemeMode();
+  const [market, setMarket] = useState(true);
+  const insets = useSafeAreaInsets();
+  return <View style={{flex:1,backgroundColor:theme.colors.background}}>
+    <View style={{flexDirection:'row',gap:8,paddingHorizontal:16,paddingTop:insets.top+8}}>
+      <View style={{flex:1}}><Button label="Oportunidades" variant={market?'primary':'outline'} onPress={()=>setMarket(true)} /></View>
+      <View style={{flex:1}}><Button label="Meu funil" variant={market?'outline':'primary'} onPress={()=>setMarket(false)} /></View>
+    </View>
+    {market ? <Mercado /> : <FunilScreen />}
+  </View>;
+}
+function FunilScreen() {
   useThemeMode();
   const router = useRouter();
   const { user, account } = useAuth();
@@ -66,7 +80,7 @@ export default function OportunidadesScreen() {
       setColumns(data.columns);
       setTotals(data.totals);
     } catch (loadError) {
-      setError(loadError instanceof ApiError ? loadError.message : 'Nao foi possivel carregar o pipeline.');
+      setError(loadError instanceof ApiError ? loadError.message : 'Não foi possível carregar o pipeline.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -95,7 +109,7 @@ export default function OportunidadesScreen() {
           <Button label="Encontrar oportunidades" onPress={() => router.push('/mercado')} />
           <Text style={styles.title}>Meu funil de oportunidades</Text>
           <Text style={styles.subtitle}>
-            {currency(totals.open)} em negociacao agora.
+            {currency(totals.open)} em negociação agora.
           </Text>
 
           <View style={styles.chips}>
@@ -127,7 +141,7 @@ export default function OportunidadesScreen() {
                   title="Nenhuma oportunidade aqui"
                   message={
                     filter === 'abertas'
-                      ? 'Crie uma oportunidade e acompanhe cada negociacao ate o fechamento.'
+                      ? 'Crie uma oportunidade e acompanhe cada negociação até o fechamento.'
                       : 'Nenhuma oportunidade nesse status no momento.'
                   }
                   actionLabel={filter === 'abertas' ? 'Nova oportunidade' : undefined}
