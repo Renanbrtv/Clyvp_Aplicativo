@@ -1,3 +1,4 @@
+import { hasReviewAccess } from './review-access';
 import { randomUUID } from 'node:crypto';
 import { env } from '../config/env';
 import { execute, queryOne, withTransaction, type RowDataPacket } from '../config/database';
@@ -29,6 +30,9 @@ export const billingService = {
    if (!billingService.configured) return;
    const existing = inFlight.get(userId); if (existing) return existing;
    const task = (async () => {
+     const courtesy = await queryOne<RowDataPacket>(
+       'SELECT s.external_provider,s.status,p.code AS plan_code FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=? ORDER BY s.id DESC LIMIT 1', [userId]);
+     if (hasReviewAccess(courtesy)) return;
      const account = await billingService.identity(userId);
      if (!force && account.checked_at && Date.now() - new Date(account.checked_at).getTime() < 60000) return;
      let subscriber: Parameters<typeof entitlementPlan>[0];
@@ -43,7 +47,8 @@ export const billingService = {
      const verified = entitlementPlan(subscriber, env.BILLING_ALLOW_SANDBOX);
      await withTransaction(async () => {
        await userRepository.lock(userId);
-       const current = await queryOne<RowDataPacket>('SELECT id, plan_id FROM subscriptions WHERE user_id=? ORDER BY id DESC LIMIT 1 FOR UPDATE', [userId]);
+       const current = await queryOne<RowDataPacket>('SELECT s.id,s.plan_id,s.external_provider,s.status,p.code AS plan_code FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=? ORDER BY s.id DESC LIMIT 1 FOR UPDATE', [userId]);
+       if (hasReviewAccess(current)) return; // Reconfere após o bloqueio: uma concessão pode ter ocorrido durante o fetch.
        const plan = await queryOne<RowDataPacket>('SELECT id FROM plans WHERE code=?', [verified.code]);
        if (!current || !plan) throw AppError.notFound('Plano nao encontrado.');
        await execute(`UPDATE subscriptions SET plan_id=?, status='ativa', is_founder=0, price_paid=NULL,
