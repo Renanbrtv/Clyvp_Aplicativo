@@ -1,3 +1,4 @@
+import { adminRoutes } from '../modules/admin/routes';
 import { Router } from 'express';
 
 import { APP_NAME, APP_TAGLINE } from '../config/constants';
@@ -106,6 +107,7 @@ router.get('/', (_req, res) => {
 router.get('/health', asyncHandler(healthController.check));
 
 /* -------------------------------- Conta -------------------------------- */
+router.use('/admin', adminRoutes);
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/companies', companyRoutes);

@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { Button,Card,Text,View,Image,Note,styles,theme,currency,categoryLabel } from './ui';
-export const moderationLabel=(state:string)=>({approved:'Publicado',pending:'Em análise',rejected:'Não aprovado'}[state]??'Em análise');
+export const moderationLabel=(state:string)=>({approved:'Publicado',pending:'Em análise',rejected:'Não aprovado',changes:'Correções solicitadas',suspended:'Publicação suspensa'}[state]??'Em análise');
 export function PostCard({post:p,own=false}:{post:any;own?:boolean}) {
  const router=useRouter();
  const price=p.budget_from!=null&&p.budget_to!=null?currency(p.budget_from)+' a '+currency(p.budget_to):p.budget_to!=null?'Até '+currency(p.budget_to):p.budget_from!=null?'A partir de '+currency(p.budget_from):'Valor a combinar';

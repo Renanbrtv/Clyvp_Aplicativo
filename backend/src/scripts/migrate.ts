@@ -51,6 +51,9 @@ async function main(): Promise<void> {
       const moderationPath = path.join(path.dirname(schemaPath), 'marketplace-moderation.sql');
       if (fs.existsSync(moderationPath)) await connection.query(fs.readFileSync(moderationPath, 'utf8'));
 
+      const adminPath = path.join(path.dirname(schemaPath), 'admin.sql');
+      if (fs.existsSync(adminPath)) await connection.query(fs.readFileSync(adminPath, 'utf8'));
+
       await connection.query(`USE \`${env.DB_NAME}\``);
       const [tables] = await connection.query<any[]>('SHOW TABLES');
 

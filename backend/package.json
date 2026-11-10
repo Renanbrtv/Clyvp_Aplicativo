@@ -24,7 +24,11 @@
     "test:providers": "node --import tsx src/scripts/provider-test.ts",
     "test:cly": "node --import tsx src/scripts/cly-test.ts",
     "test:support": "node --import tsx src/scripts/support-test.ts",
-    "test:market": "node --import tsx src/scripts/marketplace-test.ts"
+    "test:market": "node --import tsx src/scripts/marketplace-test.ts",
+    "test:admin": "node --import tsx src/scripts/admin.test.ts",
+    "db:admin": "node --import tsx src/scripts/admin-migrate.ts",
+    "build:admin": "cd ../admin && npm run build",
+    "test:admin:integration": "node --import tsx src/scripts/admin-integration.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

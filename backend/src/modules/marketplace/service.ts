@@ -1,3 +1,4 @@
+import { audit } from '../admin/security';
 import { execute, query, queryOne, withTransaction, type RowDataPacket as Row } from '../../config/database';
 import { userRepository } from '../../repositories/user.repository';
 import { clientRepository } from '../../repositories/client.repository';
@@ -22,13 +23,20 @@ const approx = (v: number | null) => (v === null ? null : Math.round(v * 100) / 
 const date = (v: any) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? '').slice(0, 10));
 const row = (sql: string, args: unknown[] = []) => queryOne<Row>(sql, args);
 const rows = (sql: string, args: unknown[] = []) => query<Row>(sql, args);
-export const isModerator = (id: number) =>
+const legacyModerator = (id: number) =>
   (process.env.MARKET_MODERATOR_USER_IDS ?? '')
     .split(',')
     .map((v) => v.trim())
     .filter(Boolean)
     .includes(String(id));
+export async function isModerator(id: number): Promise<boolean> {
+  if (process.env.ADMIN_ENABLED !== 'true') return legacyModerator(id);
+  const member = await row("SELECT m.role FROM admin_members m JOIN users u ON u.id=m.user_id WHERE m.user_id=? AND m.enabled=1 AND u.status='ativo' AND u.deleted_at IS NULL",[id]);
+  return member?.role === 'owner' || member?.role === 'moderator';
+}
 async function active(id: number) {
+  const user=await row("SELECT id FROM users WHERE id=? AND status='ativo' AND deleted_at IS NULL",[id]);
+  if(!user) throw AppError.forbidden('Conta indisponível.');
   if (await row('SELECT user_id FROM market_suspensions WHERE user_id=?', [id]))
     throw AppError.forbidden(
       'Seu acesso de publicacao ao marketplace foi suspenso. Entre em contato com o suporte.',
@@ -119,8 +127,8 @@ async function mutateWork<T>(actor: number, id: number, fn: (w: Row) => Promise<
   });
 }
 const hideBlocked = `NOT EXISTS(SELECT 1 FROM market_blocks b WHERE (b.user_id=? AND b.target_id=p.owner_id) OR (b.target_id=? AND b.user_id=p.owner_id))`;
-const approvedPost = `EXISTS(SELECT 1 FROM market_content_reviews cr WHERE cr.target_type='post' AND cr.target_id=p.id AND cr.state='approved')`;
-const approvedProfile = `EXISTS(SELECT 1 FROM market_content_reviews cr WHERE cr.target_type='profile' AND cr.target_id=p.user_id AND cr.state='approved')`;
+const approvedPost = `EXISTS(SELECT 1 FROM users active_owner WHERE active_owner.id=p.owner_id AND active_owner.status='ativo' AND active_owner.deleted_at IS NULL) AND EXISTS(SELECT 1 FROM market_content_reviews cr WHERE cr.target_type='post' AND cr.target_id=p.id AND cr.state='approved')`;
+const approvedProfile = `EXISTS(SELECT 1 FROM users active_owner WHERE active_owner.id=p.user_id AND active_owner.status='ativo' AND active_owner.deleted_at IS NULL) AND EXISTS(SELECT 1 FROM market_content_reviews cr WHERE cr.target_type='profile' AND cr.target_id=p.user_id AND cr.state='approved')`;
 async function queueContent(type: 'post' | 'profile', target: number, owner: number) {
   await execute(`INSERT INTO market_content_reviews(target_type,target_id,owner_id) VALUES(?,?,?)
     ON DUPLICATE KEY UPDATE state='pending',revision=revision+1,note='',moderator_id=NULL`, [type,target,owner]);
@@ -152,7 +160,7 @@ export const marketService = {
       plan: p,
       usage,
       rulesVersion: RULES_VERSION,
-      moderator: isModerator(id),
+      moderator: await isModerator(id),
       stats: profile ? (await marketService.profile(id, id)).stats : null,
       categories,
     };
@@ -727,7 +735,7 @@ export const marketService = {
     return { id: result.insertId, emailed };
   },
   async moderation(actor: number) {
-    if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
+    if (!await isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
     return {
       queue: await rows(`SELECT cr.*,IF(cr.target_type='post',p.title,mp.name) title
         FROM market_content_reviews cr LEFT JOIN market_posts p ON cr.target_type='post' AND p.id=cr.target_id
@@ -741,7 +749,7 @@ export const marketService = {
     };
   },
   async reviewContent(actor: number, type: 'post' | 'profile', id: number) {
-    if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito à moderação.');
+    if (!await isModerator(actor)) throw AppError.forbidden('Acesso restrito à moderação.');
     return withTransaction(async () => {
       const owner = await row('SELECT owner_id FROM market_content_reviews WHERE target_type=? AND target_id=?', [type,id]);
       if (!owner) throw AppError.notFound('Conteúdo não encontrado.');
@@ -751,26 +759,27 @@ export const marketService = {
       return { type, id, review, content };
     });
   },
-  async decideContent(actor: number, type: 'post' | 'profile', id: number, input: { revision: number; action: 'approved' | 'rejected'; note: string }) {
-    if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito à moderação.');
+  async decideContent(actor: number, type: 'post' | 'profile', id: number, input: { revision: number; action: 'approved' | 'rejected' | 'changes' | 'suspended'; note: string }) {
+    if (!await isModerator(actor)) throw AppError.forbidden('Acesso restrito à moderação.');
     return withTransaction(async () => {
       const initial = await row('SELECT owner_id FROM market_content_reviews WHERE target_type=? AND target_id=?', [type,id]);
       if (!initial) throw AppError.notFound('Conteúdo não encontrado.');
       await lockUsers(initial.owner_id);
       await active(initial.owner_id);
       const review = await row('SELECT * FROM market_content_reviews WHERE target_type=? AND target_id=? FOR UPDATE', [type,id]);
-      if (!review || review.state !== 'pending' || review.revision !== input.revision)
+      if (!review || review.revision !== input.revision)
         throw AppError.conflict('O conteúdo foi alterado ou já foi analisado. Reabra antes de decidir.');
       const content = await row(type === 'post' ? 'SELECT * FROM market_posts WHERE id=? FOR UPDATE' : 'SELECT * FROM market_profiles WHERE user_id=? FOR UPDATE', [id]);
       if (!content || (type === 'post' ? content.hidden || content.status !== 'aberta' : !content.published))
         throw AppError.conflict('Este conteúdo não está mais disponível para publicação.');
-      await execute('UPDATE market_content_reviews SET state=?,note=?,moderator_id=? WHERE target_type=? AND target_id=?', [input.action,input.note,actor,type,id]);
+      await execute('UPDATE market_content_reviews SET state=?,note=?,moderator_id=?,revision=revision+1 WHERE target_type=? AND target_id=?', [input.action,input.note,actor,type,id]);
       await execute('INSERT INTO market_content_decisions(target_type,target_id,revision,decision,note,moderator_id) VALUES(?,?,?,?,?,?)', [type,id,input.revision,input.action,input.note,actor]);
+      if (process.env.ADMIN_ENABLED === 'true') await audit(actor,'content.'+input.action,type,id,input.note,{revision:input.revision});
       return { state: input.action };
     });
   },
   async reportContent(actor: number, id: number) {
-    if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
+    if (!await isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
     const report = await row('SELECT * FROM market_reports WHERE id=?', [id]);
     if (!report) throw AppError.notFound('Denuncia nao encontrada.');
     const sql: Record<string, string> = {
@@ -782,7 +791,7 @@ export const marketService = {
     return { report, content: await row(sql[report.target_type], [report.target_id]) };
   },
   async resolve(actor: number, id: number, input: { action: string; note: string }) {
-    if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
+    if (!await isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
     return withTransaction(async () => {
       const report = await row('SELECT * FROM market_reports WHERE id=? FOR UPDATE', [id]);
       if (!report) throw AppError.notFound('Denuncia nao encontrada.');
@@ -806,13 +815,17 @@ export const marketService = {
         "UPDATE market_reports SET status='resolvida',resolution=?,moderator_id=?,resolved_at=UTC_TIMESTAMP() WHERE id=?",
         [input.action + ': ' + input.note, actor, id],
       );
+      if (process.env.ADMIN_ENABLED === 'true') await audit(actor,'report.resolve','report',id,input.note,{action:input.action});
       return { resolved: true };
     });
   },
   async restoreUser(actor: number, target: number) {
-    if (!isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
-    await execute('DELETE FROM market_suspensions WHERE user_id=?', [target]);
-    return { restored: true };
+    if (!await isModerator(actor)) throw AppError.forbidden('Acesso restrito a moderacao.');
+    return withTransaction(async () => {
+      await execute('DELETE FROM market_suspensions WHERE user_id=?', [target]);
+      if(process.env.ADMIN_ENABLED === 'true') await audit(actor,'market.restore','user',target,'Acesso ao marketplace restaurado');
+      return { restored: true };
+    });
   },
   async goal(actor: number, input: { month: string; amount: number }) {
     await billingService.sync(actor);

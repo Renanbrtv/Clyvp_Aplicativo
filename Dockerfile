@@ -24,6 +24,8 @@ RUN npm ci
 COPY backend/tsconfig.json ./
 COPY backend/src ./src
 RUN npm run build
+COPY admin /admin
+RUN cd /admin && node /app/node_modules/typescript/bin/tsc && node build.mjs
 
 # Descarta as dependencias de desenvolvimento.
 RUN npm prune --omit=dev
@@ -32,10 +34,12 @@ RUN npm prune --omit=dev
 FROM node:22-alpine AS runtime
 
 ENV NODE_ENV=production
+ENV ADMIN_STATIC_DIR=/app/admin
 WORKDIR /app
 
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /admin/dist ./admin
 COPY --chown=node:node backend/package.json ./
 # O script de migration le daqui.
 COPY --chown=node:node database ./database

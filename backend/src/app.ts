@@ -1,3 +1,4 @@
+import path from 'node:path';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
@@ -23,7 +24,16 @@ export function createApp(): Express {
   app.disable('x-powered-by');
 
   // --- Seguranca e infraestrutura ---
-  app.use(helmet());
+  app.use(helmet({ contentSecurityPolicy: { directives: { upgradeInsecureRequests: env.isProduction ? [] : null } } }));
+  // Admin cookies must never inherit the mobile app's broad CORS allowlist.
+  app.use(env.API_PREFIX + '/admin', (req, res, next) => {
+    const origin = req.get('origin');
+    if (origin && origin !== process.env.ADMIN_ORIGIN) {
+      res.status(403).json({ success: false, error: { message: 'Origem administrativa não autorizada.' } });
+      return;
+    }
+    next();
+  });
   app.use(
     cors({
       origin: env.corsOrigins === '*' ? true : env.corsOrigins,
@@ -40,6 +50,10 @@ export function createApp(): Express {
   // --- Rotas ---
   app.get('/health', asyncHandler(healthController.check));
   app.use(env.API_PREFIX, apiRoutes);
+
+  if (process.env.ADMIN_ENABLED === 'true') {
+    app.use('/admin', express.static(path.resolve(process.cwd(), process.env.ADMIN_STATIC_DIR || '../admin/dist'), { index: 'index.html' }));
+  }
 
   // --- Fallbacks ---
   app.use(notFoundHandler);
