@@ -1,0 +1,25 @@
+-- Additive only. Existing users, billing and marketplace data are reused.
+CREATE TABLE IF NOT EXISTS admin_control (id TINYINT PRIMARY KEY) ENGINE=InnoDB;
+INSERT IGNORE INTO admin_control(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS admin_members (
+ user_id BIGINT UNSIGNED PRIMARY KEY,
+ role VARCHAR(20) NOT NULL,
+ enabled TINYINT NOT NULL DEFAULT 1,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS admin_sessions (
+ token_hash CHAR(64) PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL,
+ security_version INT NOT NULL, expires_at DATETIME NOT NULL,
+ last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+ KEY idx_admin_sessions_user(user_id)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS admin_audit (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ actor_id BIGINT UNSIGNED NULL, action VARCHAR(80) NOT NULL,
+ target_type VARCHAR(30) NOT NULL, target_id BIGINT UNSIGNED NULL,
+ reason VARCHAR(500) NOT NULL DEFAULT '', metadata JSON NULL,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ KEY idx_admin_audit_date(created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

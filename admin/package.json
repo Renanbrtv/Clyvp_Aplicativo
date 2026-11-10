@@ -1,0 +1,1 @@
+{"name":"clyvo-admin","private":true,"version":"1.0.0","scripts":{"typecheck":"node ../backend/node_modules/typescript/bin/tsc --noEmit","build":"node ../backend/node_modules/typescript/bin/tsc && node build.mjs"}}
