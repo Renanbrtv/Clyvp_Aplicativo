@@ -287,6 +287,36 @@ async function main() {
   await execute('UPDATE subscriptions SET plan_id=? WHERE user_id=?', [proPlan!.id, v.id]);
   await s.post(v.id, bulk[declined].insertId);
   check(true, 'Upgrade Pro libera detalhes alem da cota Free');
+  const invitation = { title: 'Projeto privado', description: 'Preciso de ajuda para instalar câmeras na loja.' };
+  const inviteResponse = await req('POST', `/market/profiles/${p.id}/invites`, invitation, c.token);
+  assert.equal(inviteResponse.status, 200, JSON.stringify(inviteResponse.body));
+  const inviteId = inviteResponse.body.data.id;
+  const invitePath = `/market/invites/${inviteId}`;
+  check((await req('GET', invitePath, undefined, o.token)).status === 404, 'Terceiros não podem acessar o convite');
+  check((await req('GET', '/market/invites', undefined, o.token)).body.data.invites.length === 0, 'Convite não aparece para terceiros');
+  check((await req('POST', `/market/profiles/${p.id}/invites`, invitation, c.token)).status === 409, 'Convites duplicados em aberto são impedidos');
+  check((await req('POST', invitePath + '/respond', { action: 'reply', message: 'Tenho disponibilidade.' }, p.token)).status === 200, 'Profissional pode responder');
+  check((await req('POST', invitePath + '/proposal', { amount: 500, dueDate: day, message: offer.message }, c.token)).status === 403, 'Contratante não pode propor em nome do profissional');
+  await execute('UPDATE users SET whatsapp=? WHERE id IN (?,?)', ['62999999999', c.id, p.id]);
+  await s.shareInviteWhatsapp(c.id, inviteId, true);
+  check(!(await s.invite(c.id, inviteId)).whatsappLink, 'WhatsApp não é revelado com autorização unilateral');
+  await s.shareInviteWhatsapp(p.id, inviteId, true);
+  check((await s.invite(c.id, inviteId)).whatsappLink?.startsWith('https://wa.me/'), 'WhatsApp liberado com autorização mútua');
+  await s.shareInviteWhatsapp(p.id, inviteId, false);
+  check(!(await s.invite(c.id, inviteId)).whatsappLink, 'Revogação retira o link do convite');
+  await s.proposeInvite(p.id, inviteId, { amount: 500, dueDate: day, message: offer.message });
+  await s.block(p.id, c.id, true);
+  await rejects(() => s.acceptInvite(c.id, inviteId), 'Bloqueio impede aceitar proposta privada');
+  await s.block(p.id, c.id, false);
+  const acceptedInvites = await Promise.all([s.acceptInvite(c.id, inviteId), s.acceptInvite(c.id, inviteId)]);
+  check(acceptedInvites[0].workId === acceptedInvites[1].workId, 'Aceites simultâneos criam um único trabalho');
+  const privateWork = await queryOne<Row>('SELECT post_id FROM market_works WHERE id=?', [acceptedInvites[0].workId]);
+  assert.ok(privateWork);
+  await rejects(() => s.post(o.id, privateWork.post_id), 'Projeto contratado continua fora da vitrine pública');
+  check((await s.mine(c.id)).works.some(work => work.id === acceptedInvites[0].workId), 'Projeto contratado entra em Meus trabalhos');
+  const declinedInvite = await s.inviteProfessional(c.id, p.id, invitation);
+  await s.respondInvite(p.id, declinedInvite.id, { action: 'decline' });
+  await rejects(() => s.proposeInvite(p.id, declinedInvite.id, { amount: 500, dueDate: day, message: offer.message }), 'Convite recusado não aceita proposta');
   const exported = await req('GET', '/users/me/export', undefined, p.token);
   check(
     exported.status === 200 &&

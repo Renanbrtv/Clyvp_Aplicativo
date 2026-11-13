@@ -7,6 +7,7 @@ import { subscriptionRepository } from '../../repositories/subscription.reposito
 import { planLimitService } from '../../services/plan-limit.service';
 import { billingService } from '../../services/billing.service';
 import { AppError } from '../../utils/app-error';
+import { whatsappService } from '../../services/whatsapp.service';
 import { supportService } from '../../services/support.service';
 import { cleanImage } from './images';
 import {
@@ -83,8 +84,13 @@ async function quota(id: number, kind: 'offers' | 'posts' | 'views') {
     kind === 'views'
       ? (await row('SELECT COUNT(*) n FROM market_views WHERE user_id=? AND month_key=?', [id, month()]))!.n
       : (await row(
-          `SELECT COUNT(*) n FROM ${kind === 'offers' ? 'market_proposals' : 'market_posts'} WHERE ${kind === 'offers' ? 'professional_id' : 'owner_id'}=? AND created_at>=?`,
-          [id, month() + '-01'],
+          kind === 'offers'
+            ? `SELECT (SELECT COUNT(*) FROM market_proposals a WHERE a.professional_id=? AND a.created_at>=?
+                AND NOT EXISTS(SELECT 1 FROM market_works w JOIN market_project_invites i ON i.work_id=w.id WHERE w.proposal_id=a.id))
+                + (SELECT COUNT(*) FROM market_project_invites WHERE professional_id=? AND proposed_at>=?) n`
+            : `SELECT COUNT(*) n FROM market_posts p WHERE p.owner_id=? AND p.created_at>=?
+                AND NOT EXISTS(SELECT 1 FROM market_works w JOIN market_project_invites i ON i.work_id=w.id WHERE w.post_id=p.id)`,
+          kind === 'offers' ? [id, month() + '-01', id, month() + '-01'] : [id, month() + '-01'],
         ))!.n;
   if (n >= limit)
     throw new AppError(
@@ -142,6 +148,33 @@ async function acceptPostRules(id: number, accepted?: boolean) {
     ON DUPLICATE KEY UPDATE consent_version=VALUES(consent_version),consent_at=VALUES(consent_at)`, [id,RULES_VERSION]);
   await consent(id);
 }
+async function projectInvite(actor: number, id: number, lock = false) {
+  const invite = await row(
+    `SELECT * FROM market_project_invites WHERE id=? AND (customer_id=? OR professional_id=?) ${lock ? 'FOR UPDATE' : ''}`,
+    [id, actor, actor],
+  );
+  if (!invite) throw AppError.notFound('Convite não encontrado.');
+  return invite;
+}
+
+async function checkInvitePair(customer: number, professional: number) {
+  await assertPair(customer, professional);
+  await active(customer);
+  await active(professional);
+  const accounts = await rows("SELECT id FROM users WHERE id IN (?,?) AND status='ativo'", [customer, professional]);
+  if (accounts.length !== 2) throw AppError.notFound('Uma das contas está indisponível.');
+}
+
+async function mutateInvite<T>(actor: number, id: number, fn: (invite: Row) => Promise<T>) {
+  const initial = await projectInvite(actor, id);
+  return withTransaction(async () => {
+    await lockUsers(initial.customer_id, initial.professional_id);
+    const invite = await projectInvite(actor, id, true);
+    await checkInvitePair(invite.customer_id, invite.professional_id);
+    return fn(invite);
+  });
+}
+
 export const marketService = {
   async me(id: number) {
     const [preferences, profile, p] = await Promise.all([
@@ -150,8 +183,13 @@ export const marketService = {
       plan(id),
     ]);
     const usage = await row(
-      `SELECT (SELECT COUNT(*) FROM market_proposals WHERE professional_id=? AND created_at>=?) offers,(SELECT COUNT(*) FROM market_posts WHERE owner_id=? AND created_at>=?) posts,(SELECT COUNT(*) FROM market_views WHERE user_id=? AND month_key=?) views`,
-      [id, month() + '-01', id, month() + '-01', id, month()],
+      `SELECT (SELECT COUNT(*) FROM market_proposals a WHERE a.professional_id=? AND a.created_at>=?
+        AND NOT EXISTS(SELECT 1 FROM market_works w JOIN market_project_invites i ON i.work_id=w.id WHERE w.proposal_id=a.id))
+        + (SELECT COUNT(*) FROM market_project_invites WHERE professional_id=? AND proposed_at>=?) offers,
+        (SELECT COUNT(*) FROM market_posts p WHERE p.owner_id=? AND p.created_at>=?
+        AND NOT EXISTS(SELECT 1 FROM market_works w JOIN market_project_invites i ON i.work_id=w.id WHERE w.post_id=p.id)) posts,
+        (SELECT COUNT(*) FROM market_views WHERE user_id=? AND month_key=?) views`,
+      [id, month() + '-01', id, month() + '-01', id, month() + '-01', id, month()],
     );
     return {
       accountId: id,
@@ -235,6 +273,123 @@ export const marketService = {
         [viewer, viewer, '%' + search + '%', '%' + search + '%', '%' + search + '%', (page - 1) * 20],
       ),
     };
+  },
+  async inviteProfessional(actor: number, target: number, input: { title: string; description: string; acceptRules?: boolean }) {
+    if (actor === target) throw AppError.badRequest('Escolha outro profissional.');
+    return withTransaction(async () => {
+      await lockUsers(actor, target);
+      await checkInvitePair(actor, target);
+      await acceptPostRules(actor, input.acceptRules);
+      const profile = await row('SELECT published FROM market_profiles WHERE user_id=?', [target]);
+      if (!profile?.published || (await reviewState('profile', target)).state !== 'approved')
+        throw AppError.notFound('Perfil profissional indisponível.');
+      if (await row("SELECT id FROM market_project_invites WHERE customer_id=? AND professional_id=? AND status IN ('pendente','respondido','proposta') LIMIT 1", [actor, target]))
+        throw AppError.conflict('Já existe um convite em aberto para esse profissional.');
+      const count = await row('SELECT COUNT(*) n FROM market_project_invites WHERE customer_id=? AND created_at>=UTC_DATE()', [actor]);
+      if (Number(count?.n) >= 10) throw AppError.conflict('Limite diário de convites atingido. Tente amanhã.');
+      const result = await execute('INSERT INTO market_project_invites(customer_id,professional_id,title,description) VALUES(?,?,?,?)',
+        [actor, target, input.title, input.description]);
+      return { id: result.insertId };
+    });
+  },
+  async invites(actor: number) {
+    const invites = await rows(
+      `SELECT i.id,i.title,i.status,i.created_at,
+        IF(i.customer_id=?,'enviado','recebido') direction,
+        IF(i.customer_id=?,COALESCE(mp.name,p.name),c.name) counterpart
+      FROM market_project_invites i JOIN users c ON c.id=i.customer_id JOIN users p ON p.id=i.professional_id
+      LEFT JOIN market_profiles mp ON mp.user_id=p.id
+      WHERE (i.customer_id=? OR i.professional_id=?) AND c.status='ativo' AND p.status='ativo'
+      AND NOT EXISTS(SELECT 1 FROM market_blocks b WHERE (b.user_id=i.customer_id AND b.target_id=i.professional_id) OR (b.user_id=i.professional_id AND b.target_id=i.customer_id))
+      AND NOT EXISTS(SELECT 1 FROM market_suspensions s WHERE s.user_id IN (i.customer_id,i.professional_id))
+      ORDER BY i.id DESC LIMIT 100`, [actor, actor, actor, actor],
+    );
+    return { invites };
+  },
+  async invite(actor: number, id: number) {
+    const invite = await projectInvite(actor, id);
+    await checkInvitePair(invite.customer_id, invite.professional_id);
+    const sender = actor === invite.customer_id;
+    const counterpartId = sender ? invite.professional_id : invite.customer_id;
+    const shareAllowed = !['recusado','cancelado'].includes(invite.status);
+    const sharing = Boolean(sender ? invite.customer_whatsapp_ok : invite.professional_whatsapp_ok);
+    const otherSharing = Boolean(sender ? invite.professional_whatsapp_ok : invite.customer_whatsapp_ok);
+    const contact = shareAllowed && sharing && otherSharing
+      ? await row('SELECT whatsapp FROM users WHERE id=?', [counterpartId]) : null;
+    return {
+      shareAllowed, sharing, otherSharing,
+      whatsappLink: contact?.whatsapp ? whatsappService.link(contact.whatsapp, 'Olá! Sobre o projeto no Clyvo: ' + invite.title) : null,
+      id: invite.id, title: invite.title, description: invite.description, status: invite.status,
+      reply: invite.reply, amount: invite.amount, dueDate: invite.due_date ? date(invite.due_date) : null,
+      proposalMessage: invite.proposal_message, workId: invite.work_id,
+      direction: actor === invite.customer_id ? 'enviado' : 'recebido',
+      counterpartId,
+    };
+  },
+  async shareInviteWhatsapp(actor: number, id: number, enabled: boolean) {
+    return mutateInvite(actor, id, async (invite) => {
+      if (enabled) {
+        if (['recusado','cancelado'].includes(invite.status)) throw AppError.conflict('O convite está encerrado.');
+        const contact = await row('SELECT whatsapp FROM users WHERE id=?', [actor]);
+        if (!whatsappService.link(contact?.whatsapp, '')) throw AppError.badRequest('Cadastre um WhatsApp válido no seu perfil primeiro.');
+      }
+      const field = actor === invite.customer_id ? 'customer_whatsapp_ok' : 'professional_whatsapp_ok';
+      await execute(`UPDATE market_project_invites SET ${field}=? WHERE id=?`, [enabled ? 1 : 0, id]);
+      return { sharing: enabled };
+    });
+  },
+  async respondInvite(actor: number, id: number, input: { action: 'reply' | 'decline' | 'cancel'; message?: string }) {
+    return mutateInvite(actor, id, async (invite) => {
+      const isSender = actor === invite.customer_id;
+      if (isSender !== (input.action === 'cancel')) throw AppError.forbidden('Esta ação não está disponível para sua conta.');
+      const status = input.action === 'reply' ? 'respondido' : input.action === 'decline' ? 'recusado' : 'cancelado';
+      if (input.action === 'reply' ? invite.status !== 'pendente' : !['pendente','respondido','proposta'].includes(invite.status))
+        throw AppError.conflict('O convite não está mais disponível para esta ação.');
+      if (input.action === 'reply') {
+        await execute('UPDATE market_project_invites SET status=?,reply=? WHERE id=?', [status, input.message, id]);
+      } else {
+        await execute('UPDATE market_project_invites SET status=? WHERE id=?', [status, id]);
+      }
+      return { status };
+    });
+  },
+  async proposeInvite(actor: number, id: number, input: { amount: number; dueDate: string; message: string }) {
+    return mutateInvite(actor, id, async (invite) => {
+      if (actor !== invite.professional_id) throw AppError.forbidden('Somente o profissional convidado pode propor.');
+      if (!['pendente','respondido'].includes(invite.status)) throw AppError.conflict('O convite não aceita nova proposta.');
+      await consent(actor);
+      const profile = await row('SELECT published FROM market_profiles WHERE user_id=?', [actor]);
+      if (!profile?.published || (await reviewState('profile', actor)).state !== 'approved')
+        throw AppError.conflict('Seu perfil precisa estar publicado e aprovado.');
+      await quota(actor, 'offers');
+      await execute("UPDATE market_project_invites SET status='proposta',amount=?,due_date=?,proposal_message=?,proposed_at=UTC_TIMESTAMP() WHERE id=?",
+        [input.amount, input.dueDate, input.message, id]);
+      return { status: 'proposta' };
+    });
+  },
+  async acceptInvite(actor: number, id: number) {
+    return mutateInvite(actor, id, async (invite) => {
+      if (actor !== invite.customer_id) throw AppError.forbidden('Somente quem enviou o convite pode aceitar.');
+      if (invite.status === 'contratado' && invite.work_id) return { workId: invite.work_id };
+      if (invite.status !== 'proposta' || date(invite.due_date) < new Date().toISOString().slice(0, 10))
+        throw AppError.conflict('Não há uma proposta válida para aceitar.');
+      // The private post is never published. It exists to reuse the current work,
+      // completion, payment tracking and review flows without changing their schema.
+      const post = await execute(
+        "INSERT INTO market_posts(owner_id,title,category,description,mode,photos,status,hidden) VALUES(?,?,'Outros',?,'remoto','[]','contratada',1)",
+        [actor, invite.title, invite.description],
+      );
+      const proposal = await execute(
+        "INSERT INTO market_proposals(post_id,professional_id,amount,due_date,message,experience,status) VALUES(?,?,?,?,?,'','aceita')",
+        [post.insertId, invite.professional_id, invite.amount, date(invite.due_date), invite.proposal_message],
+      );
+      const work = await execute(
+        'INSERT INTO market_works(post_id,proposal_id,customer_id,professional_id,title,amount,due_date) VALUES(?,?,?,?,?,?,?)',
+        [post.insertId, proposal.insertId, actor, invite.professional_id, invite.title, invite.amount, date(invite.due_date)],
+      );
+      await execute("UPDATE market_project_invites SET status='contratado',work_id=? WHERE id=?", [work.insertId, id]);
+      return { workId: work.insertId };
+    });
   },
   async posts(
     viewer: number,
@@ -482,11 +637,11 @@ export const marketService = {
         (SELECT COUNT(*) FROM market_proposals a WHERE a.post_id=p.id) proposal_count,
         JSON_UNQUOTE(JSON_EXTRACT(p.photos,'$[0]')) thumbnail
         FROM market_posts p LEFT JOIN market_content_reviews cr ON cr.target_type='post' AND cr.target_id=p.id
-        WHERE p.owner_id=? ORDER BY p.id DESC LIMIT 100`, [id])).map(
+        WHERE p.owner_id=? AND NOT EXISTS(SELECT 1 FROM market_project_invites i JOIN market_works w ON w.id=i.work_id WHERE w.post_id=p.id) ORDER BY p.id DESC LIMIT 100`, [id])).map(
         (p) => ({ ...postData(p), photos: undefined }),
       ),
       proposals: await rows(
-        `SELECT a.*,IF(p.hidden=0 AND ${approvedPost},p.title,'Publicação indisponível ou em análise') title,p.status post_status,(p.hidden=0 AND ${approvedPost}) post_visible FROM market_proposals a JOIN market_posts p ON p.id=a.post_id WHERE a.professional_id=? ORDER BY a.id DESC LIMIT 100`,
+        `SELECT a.*,IF(p.hidden=0 AND ${approvedPost},p.title,'Publicação indisponível ou em análise') title,p.status post_status,(p.hidden=0 AND ${approvedPost}) post_visible FROM market_proposals a JOIN market_posts p ON p.id=a.post_id WHERE a.professional_id=? AND NOT EXISTS(SELECT 1 FROM market_project_invites i JOIN market_works w ON w.id=i.work_id WHERE w.proposal_id=a.id) ORDER BY a.id DESC LIMIT 100`,
         [id],
       ),
       works: await rows(
@@ -682,10 +837,13 @@ export const marketService = {
   async block(actor: number, target: number, enabled: boolean) {
     if (actor === target) throw AppError.badRequest('Escolha outra conta.');
     if (!(await userRepository.findById(target))) throw AppError.notFound('Conta nao encontrada.');
-    if (enabled)
-      await execute('INSERT IGNORE INTO market_blocks(user_id,target_id) VALUES(?,?)', [actor, target]);
-    else await execute('DELETE FROM market_blocks WHERE user_id=? AND target_id=?', [actor, target]);
-    return { blocked: enabled };
+    return withTransaction(async () => {
+      await lockUsers(actor, target);
+      if (enabled)
+        await execute('INSERT IGNORE INTO market_blocks(user_id,target_id) VALUES(?,?)', [actor, target]);
+      else await execute('DELETE FROM market_blocks WHERE user_id=? AND target_id=?', [actor, target]);
+      return { blocked: enabled };
+    });
   },
   async blocks(actor: number) {
     return {

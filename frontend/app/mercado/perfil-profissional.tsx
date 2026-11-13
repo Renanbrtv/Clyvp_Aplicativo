@@ -152,7 +152,8 @@ export default function PerfilProfissional() {
             maxLength={1500}
           />
           <Field
-            label="Minha experiência"
+            label="Experiência e exemplos de trabalho"
+            placeholder="Você pode descrever projetos pessoais, acadêmicos ou de clientes."
             value={form.experience}
             onChangeText={(v) => set('experience', v)}
             multiline
@@ -238,8 +239,9 @@ export default function PerfilProfissional() {
               {data.profile.price_from != null ? currency(data.profile.price_from) : 'A combinar'}
             </Note>
           </Card>
+          <Button label="Convidar para um projeto" onPress={() => router.push({ pathname: '/mercado/convidar', params: { id } })} />
           <Button label="Publicar um pedido de serviço" onPress={() => router.push('/mercado/publicar')} />
-          <Note>A conexão e a conversa são liberadas quando uma proposta é aceita.</Note>
+          <Note>Envie um convite privado para combinar o trabalho e receber uma proposta.</Note>
           {data.reviews.map((r: any) => (
             <Card key={r.id} style={styles.card}>
               <Text style={styles.label}>

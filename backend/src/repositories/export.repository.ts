@@ -13,6 +13,7 @@ export const exportRepository = {
     for (const table of ['market_preferences','market_profiles','market_goals','market_views','market_blocks']) result[table] = await query<RowDataPacket>(`SELECT * FROM ${table} WHERE user_id=?`,[userId]);
     result.market_posts = await query<RowDataPacket>('SELECT * FROM market_posts WHERE owner_id=?',[userId]);
     result.market_proposals = await query<RowDataPacket>('SELECT * FROM market_proposals WHERE professional_id=?',[userId]);
+    result.market_project_invites = await query<RowDataPacket>('SELECT * FROM market_project_invites WHERE customer_id=? OR professional_id=?',[userId,userId]);
     result.market_works = await query<RowDataPacket>('SELECT * FROM market_works WHERE customer_id=? OR professional_id=?',[userId,userId]);
     result.market_messages = await query<RowDataPacket>('SELECT * FROM market_messages WHERE sender_id=?',[userId]);
     result.market_reviews = await query<RowDataPacket>('SELECT * FROM market_reviews WHERE author_id=?',[userId]);

@@ -22,6 +22,7 @@ export default function Mercado(){
  }
  return <MarketScreen title="Oportunidades" subtitle="Encontre serviços ou acompanhe seus anúncios.">
   <Button label="+ Publicar oportunidade" onPress={()=>router.push('/mercado/publicar')}/>
+  <Button label="Convites de projeto" variant="outline" onPress={()=>router.push('/mercado/convites')}/>
   <Choices label="O que você quer ver?" options={['Explorar','Minhas publicações','Propostas enviadas','Meus trabalhos']} value={tab} onChange={setTab}/>
   {tab!=='Explorar'?<MyActivity tab={tab==='Minhas publicações'?'posts':tab==='Propostas enviadas'?'proposals':'works'}/>:<>
    <Field label="Buscar oportunidades" placeholder="Ex.: eletricista, design, manutenção..." value={search} maxLength={100} onChangeText={S} onSubmitEditing={apply}/>

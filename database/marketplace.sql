@@ -89,3 +89,20 @@ CREATE TABLE IF NOT EXISTS market_views (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- Expanded paid CRM capacities requested for this evolution. Pricing and billing identifiers unchanged.
 UPDATE plans SET max_clients=NULL, max_quotes_per_month=NULL WHERE code IN ('pro','pro_max');
+
+-- Private invitations become regular marketplace works only on acceptance.
+CREATE TABLE IF NOT EXISTS market_project_invites (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ customer_id BIGINT UNSIGNED NOT NULL, professional_id BIGINT UNSIGNED NOT NULL,
+ title VARCHAR(120) NOT NULL, description VARCHAR(2000) NOT NULL,
+ status ENUM('pendente','respondido','proposta','recusado','cancelado','contratado') NOT NULL DEFAULT 'pendente',
+ reply VARCHAR(1000) NULL, amount DECIMAL(12,2) NULL, due_date DATE NULL, proposal_message VARCHAR(2000) NULL, proposed_at DATETIME NULL,
+ work_id BIGINT UNSIGNED NULL,
+ customer_whatsapp_ok TINYINT NOT NULL DEFAULT 0, professional_whatsapp_ok TINYINT NOT NULL DEFAULT 0,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ KEY idx_market_invites_customer(customer_id,id), KEY idx_market_invites_professional(professional_id,id),
+ KEY idx_market_invites_proposals(professional_id,proposed_at), UNIQUE KEY uk_market_invites_work(work_id),
+ FOREIGN KEY(customer_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY(professional_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY(work_id) REFERENCES market_works(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

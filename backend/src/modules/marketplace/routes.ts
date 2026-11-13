@@ -7,6 +7,8 @@ import { asyncHandler, sendSuccess } from '../../utils/http';
 import { AppError } from '../../utils/app-error';
 import { marketService as s } from './service';
 import {
+  day,
+  money,
   profileSchema,
   postSchema,
   proposalSchema,
@@ -65,6 +67,33 @@ router.get(
   '/profiles/:id',
   run((uid, r) => s.profile(uid, id(r.params.id))),
 );
+router.post('/profiles/:id/invites',
+  validate(z.object({
+    title: z.string().trim().min(5).max(120),
+    description: z.string().trim().min(15).max(2000),
+    acceptRules: z.boolean().optional(),
+  }).strict()),
+  run((uid, r) => s.inviteProfessional(uid, id(r.params.id), r.body)));
+router.get('/invites', run((uid) => s.invites(uid)));
+router.get('/invites/:id', run((uid, r) => s.invite(uid, id(r.params.id))));
+router.post('/invites/:id/respond',
+  validate(z.discriminatedUnion('action', [
+    z.object({ action: z.literal('reply'), message: z.string().trim().min(1).max(1000) }).strict(),
+    z.object({ action: z.literal('decline') }).strict(),
+    z.object({ action: z.literal('cancel') }).strict(),
+  ])),
+  run((uid, r) => s.respondInvite(uid, id(r.params.id), r.body)));
+router.post('/invites/:id/proposal',
+  validate(z.object({
+    amount: money.positive(),
+    dueDate: day.refine((v) => v >= new Date().toISOString().slice(0, 10), 'Escolha uma data futura.'),
+    message: z.string().trim().min(10).max(2000),
+  }).strict()),
+  run((uid, r) => s.proposeInvite(uid, id(r.params.id), r.body)));
+router.post('/invites/:id/whatsapp',
+  validate(z.object({ enabled: z.boolean() }).strict()),
+  run((uid, r) => s.shareInviteWhatsapp(uid, id(r.params.id), r.body.enabled)));
+router.post('/invites/:id/accept', run((uid, r) => s.acceptInvite(uid, id(r.params.id))));
 const list = z
   .object({
     search: z.string().trim().max(100).optional(),
