@@ -21,7 +21,7 @@ import { currency, relativeDays, whatsappLink } from '../../src/shared/utils/for
 const STATUS_FLOW = [
   { value: 'novo_contato', label: 'Novo contato', icon: 'user' },
   { value: 'proposta_enviada', label: 'Proposta enviada', icon: 'send' },
-  { value: 'negociacao', label: 'Negociacao', icon: 'message-square' },
+  { value: 'negociacao', label: 'Negociação', icon: 'message-square' },
   { value: 'aguardando_pagamento', label: 'Aguardando pagamento', icon: 'clock' },
   { value: 'fechado', label: 'Fechado', icon: 'check-circle' },
   { value: 'perdido', label: 'Perdido', icon: 'x-circle' },
@@ -176,7 +176,7 @@ export default function OportunidadeDetalheScreen() {
         />
       </View>
 
-      <Text style={styles.sectionTitle}>Em que pe esta</Text>
+      <Text style={styles.sectionTitle}>Em que pé está?</Text>
       <View style={styles.statusGrid}>
         {STATUS_FLOW.map((status) => {
           const active = opportunity.status === status.value;
@@ -214,7 +214,7 @@ export default function OportunidadeDetalheScreen() {
 
       <Text style={styles.sectionTitle}>Propostas</Text>
       {quotes.length === 0 ? (
-        <Text style={styles.empty}>Nenhuma proposta ainda. Monte uma com os itens do seu catalogo.</Text>
+        <Text style={styles.empty}>Nenhuma proposta ainda. Monte uma com os itens do seu catálogo.</Text>
       ) : (
         <View style={styles.list}>
           {quotes.map((quote) => (
@@ -236,14 +236,14 @@ export default function OportunidadeDetalheScreen() {
 
       {opportunity.description ? (
         <>
-          <Text style={styles.sectionTitle}>Observacoes</Text>
+          <Text style={styles.sectionTitle}>Observações</Text>
           <Card>
             <Text style={styles.notes}>{opportunity.description}</Text>
           </Card>
         </>
       ) : null}
 
-      <Text style={styles.sectionTitle}>Historico</Text>
+      <Text style={styles.sectionTitle}>Histórico</Text>
       <View style={styles.list}>
         {history.map((entry) => (
           <View key={entry.id} style={styles.historyRow}>

@@ -52,7 +52,7 @@ export default function CadastroScreen() {
         setFieldErrors(details);
         setFormError(error.message);
       } else {
-        setFormError('Nao foi possivel criar a conta. Tente novamente.');
+        setFormError('Não foi possível criar a conta. Tente novamente.');
       }
     } finally {
       setLoading(false);
@@ -64,7 +64,7 @@ export default function CadastroScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Criar conta</Text>
         <Text style={styles.subtitle}>
-          Leva menos de um minuto. Voce comeca no plano gratuito.
+          Leva menos de um minuto. Você começa no plano gratuito.
         </Text>
       </View>
 
@@ -81,7 +81,7 @@ export default function CadastroScreen() {
         <Input
           label="E-mail"
           icon="mail"
-          placeholder="voce@email.com"
+          placeholder="você@email.com"
           value={email}
           onChangeText={setEmail}
           keyboard="email-address"
@@ -100,23 +100,23 @@ export default function CadastroScreen() {
         />
 
         <Input
-          label="Nome do seu negocio"
+          label="Nome do seu negócio"
           icon="briefcase"
           placeholder="Aparece nas suas propostas"
           value={companyName}
           onChangeText={setCompanyName}
-          hint="Opcional. Da para mudar depois."
+          hint="Opcional. Dá para mudar depois."
           error={fieldErrors.companyName}
         />
 
         <Input
           label="Senha"
           icon="lock"
-          placeholder="Minimo 8 caracteres"
+          placeholder="Mínimo 8 caracteres"
           value={password}
           onChangeText={setPassword}
           secure
-          hint="Precisa ter pelo menos uma letra e um numero."
+          hint="Precisa ter pelo menos uma letra e um número."
           error={fieldErrors.password}
         />
 
@@ -125,20 +125,20 @@ export default function CadastroScreen() {
         <Button label="Criar minha conta" onPress={handleSubmit} loading={loading} />
 
         <Text style={styles.consent}>
-          Ao criar sua conta voce concorda com os{' '}
+          Ao criar sua conta você concorda com os{' '}
           <Link href="/termos" style={styles.consentLink}>
             Termos de Uso
           </Link>{' '}
           e com a{' '}
           <Link href="/privacidade" style={styles.consentLink}>
-            Politica de Privacidade
+            Política de Privacidade
           </Link>
           .
         </Text>
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Ja tem conta?</Text>
+        <Text style={styles.footerText}>Já tem conta?</Text>
         <Link href="/(auth)/login" style={styles.footerLink}>
           Entrar
         </Link>

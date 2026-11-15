@@ -9,9 +9,9 @@ import { Button, Screen } from '../src/shared/components';
 import { theme, useThemeMode, createThemedStyles } from '../src/shared/theme';
 
 const SELLS_TYPES = [
-  { value: 'servicos', label: 'Servicos', icon: 'tool' },
+  { value: 'servicos', label: 'Serviços', icon: 'tool' },
   { value: 'produtos', label: 'Produtos', icon: 'package' },
-  { value: 'servicos_e_produtos', label: 'Servicos e produtos', icon: 'layers' },
+  { value: 'servicos_e_produtos', label: 'Serviços e produtos', icon: 'layers' },
   { value: 'vendedor', label: 'Sou vendedor', icon: 'trending-up' },
   { value: 'loja', label: 'Tenho uma loja', icon: 'shopping-bag' },
   { value: 'outro', label: 'Outro', icon: 'more-horizontal' },
@@ -19,9 +19,9 @@ const SELLS_TYPES = [
 
 const MAIN_GOALS = [
   { value: 'organizar_clientes', label: 'Organizar meus clientes', icon: 'users' },
-  { value: 'criar_orcamentos', label: 'Criar orcamentos', icon: 'file-text' },
+  { value: 'criar_orcamentos', label: 'Criar orçamentos', icon: 'file-text' },
   { value: 'acompanhar_vendas', label: 'Acompanhar vendas', icon: 'bar-chart-2' },
-  { value: 'nao_esquecer_clientes', label: 'Nao esquecer de responder clientes', icon: 'clock' },
+  { value: 'nao_esquecer_clientes', label: 'Não me esquecer de responder aos clientes', icon: 'clock' },
   { value: 'aumentar_vendas', label: 'Aumentar minhas vendas', icon: 'zap' },
   { value: 'organizar_empresa', label: 'Organizar minha empresa', icon: 'grid' },
 ] as const;
@@ -75,16 +75,16 @@ export default function OnboardingScreen() {
         {isFirstStep ? (
           <>
             <Text style={styles.greeting}>Oi, {firstName}! 👋</Text>
-            <Text style={styles.title}>O que voce vende?</Text>
+            <Text style={styles.title}>O que você vende?</Text>
             <Text style={styles.subtitle}>
-              Assim o Clyvo ja abre com o que importa para o seu dia.
+              Assim, o Clyvo já abre com o que importa para o seu dia.
             </Text>
           </>
         ) : (
           <>
-            <Text style={styles.greeting}>Quase la</Text>
-            <Text style={styles.title}>Qual e o seu objetivo principal?</Text>
-            <Text style={styles.subtitle}>Isso define o que aparece em destaque no seu inicio.</Text>
+            <Text style={styles.greeting}>Quase lá!</Text>
+            <Text style={styles.title}>Qual é o seu objetivo principal?</Text>
+            <Text style={styles.subtitle}>Isso define o que aparece em destaque na sua tela inicial.</Text>
           </>
         )}
       </View>
@@ -133,7 +133,7 @@ export default function OnboardingScreen() {
         ) : (
           <>
             <Button
-              label="Comecar a usar o Clyvo"
+              label="Começar a usar o Clyvo"
               disabled={!mainGoal}
               loading={loading}
               onPress={handleFinish}

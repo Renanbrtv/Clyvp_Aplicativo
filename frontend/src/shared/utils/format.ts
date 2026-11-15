@@ -1,4 +1,4 @@
-/** Formatacao em portugues do Brasil, sem depender de bibliotecas externas. */
+/** Formatação em português do Brasil, sem depender de bibliotecas externas. */
 
 /** 8450 -> "R$ 8.450" | 8450.9 -> "R$ 8.450,90" */
 export function currency(value: number, options: { cents?: boolean } = {}): string {
@@ -23,18 +23,18 @@ export function percent(value: number): string {
   return `${sign}${String(rounded).replace('.', ',')}%`;
 }
 
-/** 0 -> "hoje" | 1 -> "ontem" | 3 -> "ha 3 dias" */
+/** 0 -> "hoje" | 1 -> "ontem" | 3 -> "há 3 dias" */
 export function relativeDays(days: number): string {
   if (days <= 0) return 'hoje';
   if (days === 1) return 'ontem';
-  return `ha ${days} dias`;
+  return `há ${days} dias`;
 }
 
-/** "Aguardando resposta ha 3 dias" */
+/** "Aguardando resposta há 3 dias" */
 export function waitingLabel(days: number): string {
   if (days <= 0) return 'Aguardando resposta desde hoje';
-  if (days === 1) return 'Aguardando resposta ha 1 dia';
-  return `Aguardando resposta ha ${days} dias`;
+  if (days === 1) return 'Aguardando resposta há 1 dia';
+  return `Aguardando resposta há ${days} dias`;
 }
 
 /** "(62) 99999-1234" */
@@ -51,12 +51,12 @@ export function phone(value: string | null | undefined): string {
   return value;
 }
 
-/** Remove tudo que nao for digito - usado antes de enviar para a API. */
+/** Remove tudo que não for dígito - usado antes de enviar para a API. */
 export function onlyDigits(value: string): string {
   return value.replace(/\D/g, '');
 }
 
-/** Link do WhatsApp com a mensagem ja pronta. */
+/** Link do WhatsApp com a mensagem já pronta. */
 export function whatsappLink(rawPhone: string | null | undefined, message: string): string | null {
   const digits = onlyDigits(rawPhone ?? '');
   if (digits.length < 10) return null;

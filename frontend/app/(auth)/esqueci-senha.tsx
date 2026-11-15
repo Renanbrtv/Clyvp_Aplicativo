@@ -34,7 +34,7 @@ export default function EsqueciSenhaScreen() {
       setError(
         submitError instanceof ApiError
           ? submitError.message
-          : 'Nao foi possivel enviar agora. Tente novamente.',
+          : 'Não foi possível enviar agora. Tente novamente.',
       );
     } finally {
       setLoading(false);
@@ -50,15 +50,15 @@ export default function EsqueciSenhaScreen() {
           </View>
           <Text style={styles.title}>Confira seu e-mail</Text>
           <Text style={styles.subtitle}>
-            Se existir uma conta com {email.trim()} e o envio for concluido, voce recebera as instrucoes para criar uma nova senha. Confira o spam; se nao chegar em alguns minutos, tente novamente.
+            Se existir uma conta com {email.trim()} e o envio for concluído, você receberá as instruções para criar uma nova senha. Confira o spam; se não chegar em alguns minutos, tente novamente.
           </Text>
 
           {devToken ? (
             <View style={styles.devBox}>
               <Text style={styles.devTitle}>Modo desenvolvimento</Text>
               <Text style={styles.devText}>
-                O envio de e-mail ainda nao esta ligado. Enquanto isso, use este token para redefinir
-                a senha em Tenho um codigo:
+                O envio de e-mail ainda não está ligado. Enquanto isso, use este token para redefinir
+                a senha em Tenho um código:
               </Text>
               <Text style={styles.devToken} selectable>
                 {devToken}
@@ -66,7 +66,7 @@ export default function EsqueciSenhaScreen() {
             </View>
           ) : null}
 
-          <Link href="/redefinir-senha" style={styles.link}>Tenho um codigo</Link>
+          <Link href="/redefinir-senha" style={styles.link}>Tenho um código</Link>
           <Link href="/(auth)/login" style={styles.link}>
             Voltar para o login
           </Link>
@@ -80,7 +80,7 @@ export default function EsqueciSenhaScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Recuperar senha</Text>
         <Text style={styles.subtitle}>
-          Informe o e-mail da sua conta e enviaremos as instrucoes.
+          Informe o e-mail da sua conta e enviaremos as instruções.
         </Text>
       </View>
 
@@ -88,7 +88,7 @@ export default function EsqueciSenhaScreen() {
         <Input
           label="E-mail"
           icon="mail"
-          placeholder="voce@email.com"
+          placeholder="você@email.com"
           value={email}
           onChangeText={setEmail}
           keyboard="email-address"
@@ -98,9 +98,9 @@ export default function EsqueciSenhaScreen() {
 
         {error ? <Text style={styles.formError}>{error}</Text> : null}
 
-        <Button label="Enviar instrucoes" onPress={handleSubmit} loading={loading} />
+        <Button label="Enviar instruções" onPress={handleSubmit} loading={loading} />
 
-        <Link href="/redefinir-senha" style={styles.linkCenter}>Tenho um codigo</Link>
+        <Link href="/redefinir-senha" style={styles.linkCenter}>Tenho um código</Link>
         <Link href="/(auth)/login" style={styles.linkCenter}>
           Voltar para o login
         </Link>

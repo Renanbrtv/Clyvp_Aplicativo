@@ -17,7 +17,7 @@ const ICONS: Record<string, keyof typeof Feather.glyphMap> = {
 };
 
 const LABELS: Record<string, string> = {
-  index: 'Inicio',
+  index: 'Início',
   oportunidades: 'Oportunidades',
   clientes: 'Clientes',
   resultados: 'Resultados',
@@ -95,7 +95,7 @@ export default function TabsLayout() {
         headerShown: false,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Inicio' }} />
+      <Tabs.Screen name="index" options={{ title: 'Início' }} />
       <Tabs.Screen name="oportunidades" options={{ title: 'Oportunidades' }} />
       <Tabs.Screen name="clientes" options={{ title: 'Clientes' }} />
       <Tabs.Screen name="resultados" options={{ title: 'Resultados' }} />

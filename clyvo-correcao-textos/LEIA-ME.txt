@@ -1,0 +1,16 @@
+CLYVO — CORREÇÕES DAS CINCO TELAS ENVIADAS
+
+1. Coloque corrigir-textos.py na raiz do projeto Clyvp_Aplicativo no Codespace.
+2. No terminal da raiz, execute: python3 corrigir-textos.py
+3. Execute: cd frontend
+4. Execute: npm run typecheck
+5. Se não houver erros, execute:
+EXPO_PUBLIC_API_URL=https://clyvo-api-production.up.railway.app/api npm run build:web
+6. Recarregue a página com Ctrl + Shift + R.
+
+O script corrige frases específicas nas telas mostradas e cria um backup fora do frontend.
+Não altera credenciais, endpoints, planos, dados legais ou identificadores enviados ao servidor.
+Os ZIPs enviados já continham diversos acentos ausentes nas imagens: a versão exibida pode ser uma exportação antiga ou usar arquivos diferentes.
+O arquivo legal-content.ts enviado também contém dados antigos do responsável; ele NÃO é sobrescrito por este pacote.
+Correção de textos não conclui a preparação para publicação na Play Store.
+Validação realizada: execução do aplicador nas cópias enviadas e segunda execução sem alterações. O projeto completo e suas dependências não foram enviados, portanto a compilação deve ser conferida no Codespace.

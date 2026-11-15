@@ -12,7 +12,18 @@ export async function callProvider(prompt: string): Promise<string> {
         instructions: CLY_INSTRUCTIONS,
         input: prompt }),
     });
-    if (!response.ok) throw new Error('Provider rejected request');
+    if (!response.ok) {
+        const body = await response.json().catch(() => null) as
+          { error?: { code?: string; type?: string } } | null;
+
+        console.error('[Cly] OpenAI rejeitou a requisicao', {
+          status: response.status,
+          code: body?.error?.code ?? 'desconhecido',
+          type: body?.error?.type ?? 'desconhecido',
+        });
+
+        throw new Error('Provider rejected request');
+      }
     const data = await response.json() as { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
     const answer = (data.output ?? []).flatMap(item => item.content ?? [])
       .filter(item => item.type === 'output_text').map(item => item.text ?? '').join('\n').trim();

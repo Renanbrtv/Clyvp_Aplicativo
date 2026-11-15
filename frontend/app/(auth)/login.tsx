@@ -41,7 +41,7 @@ export default function LoginScreen() {
         setFieldErrors(details);
         setFormError(error.message);
       } else {
-        setFormError('Nao foi possivel entrar. Tente novamente.');
+        setFormError('Não foi possível entrar. Tente novamente.');
       }
     } finally {
       setLoading(false);
@@ -60,7 +60,7 @@ export default function LoginScreen() {
         <Input
           label="E-mail"
           icon="mail"
-          placeholder="voce@email.com"
+          placeholder="você@email.com"
           value={email}
           onChangeText={setEmail}
           keyboard="email-address"
@@ -91,9 +91,9 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Ainda nao tem conta?</Text>
+        <Text style={styles.footerText}>Ainda não tem conta?</Text>
         <Link href="/(auth)/cadastro" style={styles.footerLink}>
-          Criar conta gratis
+          Criar conta grátis
         </Link>
       </View>
     <Button label="Ajuda e suporte" variant="ghost" onPress={() => router.push('/suporte')} />

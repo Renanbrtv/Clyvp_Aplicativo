@@ -29,7 +29,7 @@ export function AppHeader({
           onPress={onPressNotifications}
           hitSlop={theme.hitSlop}
           accessibilityRole="button"
-          accessibilityLabel="Notificacoes"
+          accessibilityLabel="Notificações"
           style={styles.bell}
         >
           <Feather name="bell" size={24} color={theme.colors.text} />

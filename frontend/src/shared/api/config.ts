@@ -20,7 +20,7 @@ const API_PORT = 3333;
 const API_PREFIX = '/api';
 
 /** "development" durante o `expo start`; "production" no app publicado. */
-export const APP_ENV = (process.env.APP_ENV ?? (__DEV__ ? 'development' : 'production')) as
+export const APP_ENV = (process.env.EXPO_PUBLIC_APP_ENV ?? process.env.APP_ENV ?? (__DEV__ ? 'development' : 'production')) as
   | 'development'
   | 'preview'
   | 'production';

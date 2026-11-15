@@ -50,7 +50,7 @@ export default function NovaPropostaScreen() {
   const [discount, setDiscount] = useState('');
   const [deliveryTime, setDeliveryTime] = useState('');
   const [warranty, setWarranty] = useState('');
-  const [paymentMethods, setPaymentMethods] = useState('Pix / cartao / dinheiro');
+  const [paymentMethods, setPaymentMethods] = useState('Pix / cartão / dinheiro');
   const [notes, setNotes] = useState('');
 
   const [loading, setLoading] = useState(true);
@@ -267,7 +267,7 @@ export default function NovaPropostaScreen() {
         {items.length === 0 ? (
           <Pressable onPress={() => setCatalogOpen(true)} style={styles.emptyItems}>
             <Feather name="plus-circle" size={22} color={theme.colors.primary} />
-            <Text style={styles.emptyItemsText}>Adicionar produto ou servico</Text>
+            <Text style={styles.emptyItemsText}>Adicionar produto ou serviço</Text>
           </Pressable>
         ) : (
           <View style={styles.itemList}>
@@ -275,7 +275,7 @@ export default function NovaPropostaScreen() {
               <Card key={item.key} style={styles.itemCard}>
                 <View style={styles.itemHeader}>
                   <Input
-                    placeholder="Descricao do item"
+                    placeholder="Descrição do item"
                     value={item.description}
                     onChangeText={(value) => updateItem(item.key, { description: value })}
                   />
@@ -283,7 +283,7 @@ export default function NovaPropostaScreen() {
 
                 <View style={styles.itemFields}>
                   <View style={styles.qty}>
-                    <Text style={styles.fieldLabel}>Qtd</Text>
+                    <Text style={styles.fieldLabel}>Qtd.</Text>
                     <View style={styles.stepper}>
                       <Pressable
                         onPress={() => updateItem(item.key, { quantity: Math.max(1, item.quantity - 1) })}
@@ -303,7 +303,7 @@ export default function NovaPropostaScreen() {
 
                   <View style={styles.grow}>
                     <Input
-                      label="Valor unitario"
+                      label="Valor unitário"
                       placeholder="0"
                       keyboard="numeric"
                       value={item.unitPrice ? String(item.unitPrice) : ''}
@@ -325,7 +325,7 @@ export default function NovaPropostaScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>Condicoes</Text>
+        <Text style={styles.sectionTitle}>Condições</Text>
         <View style={styles.form}>
           <Input
             label="Desconto"
@@ -340,14 +340,14 @@ export default function NovaPropostaScreen() {
           <Input
             label="Forma de pagamento"
             icon="credit-card"
-            placeholder="Pix / cartao / dinheiro"
+            placeholder="Pix / cartão / dinheiro"
             value={paymentMethods}
             onChangeText={setPaymentMethods}
           />
           <Input
-            label="Observacoes"
+            label="Observações"
             icon="file-text"
-            placeholder="O que esta incluso"
+            placeholder="O que está incluído"
             value={notes}
             onChangeText={setNotes}
             multiline

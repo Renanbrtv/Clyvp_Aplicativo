@@ -10,7 +10,7 @@ interface ActionCardProps {
   onPress?: () => void;
 }
 
-/** Atalhos "Clientes" e "Orcamentos" da tela Inicio. */
+/** Atalhos "Clientes" e "Orçamentos" da tela Início. */
 export function ActionCard({ icon, label, badge, onPress }: ActionCardProps) {
   useThemeMode();
   return (

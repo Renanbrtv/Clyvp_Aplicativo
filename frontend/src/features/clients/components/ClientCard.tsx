@@ -34,7 +34,7 @@ export function ClientCard({ client, followUpDays = 7, onPress, onContacted }: C
         : null;
 
   async function openWhatsapp() {
-    const link = whatsappLink(client.whatsapp ?? client.phone, `Ola, ${client.name.split(' ')[0]}! Tudo bem?`);
+    const link = whatsappLink(client.whatsapp ?? client.phone, `Olá, ${client.name.split(' ')[0]}! Tudo bem?`);
     if (!link) return;
     await Linking.openURL(link);
     onContacted?.();
@@ -66,7 +66,7 @@ export function ClientCard({ client, followUpDays = 7, onPress, onContacted }: C
           ) : null}
 
           <Text style={styles.lastContact}>
-            {days === null ? 'Sem contato registrado' : `Ultimo contato ${relativeDays(days)}`}
+            {days === null ? 'Sem contato registrado' : `Último contato: ${relativeDays(days)}`}
           </Text>
         </View>
 
@@ -86,7 +86,7 @@ export function ClientCard({ client, followUpDays = 7, onPress, onContacted }: C
           style={styles.actionButton}
         />
         <Button
-          label="Ver historico"
+          label="Ver histórico"
           variant="outline"
           size="small"
           iconRight="chevron-right"

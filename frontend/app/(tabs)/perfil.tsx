@@ -11,7 +11,7 @@ import { AppHeader, Avatar, Badge, Button, Card, Screen } from '../../src/shared
 import { theme, useThemeMode, createThemedStyles } from '../../src/shared/theme';
 import { currency, phone } from '../../src/shared/utils/format';
 
-/** Versao lida do app.json - nao precisa ser atualizada na mao aqui. */
+/** Versão lida do app.json; não precisa ser atualizada manualmente aqui. */
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
 export default function PerfilScreen() {
@@ -24,9 +24,10 @@ export default function PerfilScreen() {
 
   const plan = account?.subscription?.plan;
   const company = account?.company;
+  const planDisplayName = plan?.code === 'free' ? 'gratuito' : plan?.name;
 
   function confirmLogout() {
-    Alert.alert('Sair da conta', 'Voce vai precisar entrar de novo com e-mail e senha.', [
+    Alert.alert('Sair da conta', 'Você precisará entrar novamente usando seu e-mail e sua senha.', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Sair',
@@ -51,7 +52,9 @@ export default function PerfilScreen() {
         {plan ? (
           <Badge
             label={
-              account?.subscription?.isFounder ? `Plano ${plan.name} · Fundador` : `Plano ${plan.name}`
+              account?.subscription?.isFounder
+                ? `Plano ${planDisplayName} · Fundador`
+                : `Plano ${planDisplayName}`
             }
             tone={plan.code === 'free' ? 'neutro' : 'recorrente'}
             icon={plan.code === 'free' ? undefined : 'award'}
@@ -63,44 +66,44 @@ export default function PerfilScreen() {
       <Card style={styles.card}>
         <LinkRow icon="user" label="Meu perfil profissional" onPress={() => router.push('/mercado/perfil-profissional')} />
         <LinkRow icon="search" label="Encontrar oportunidades" onPress={() => router.push('/mercado')} />
-        <LinkRow icon="briefcase" label="Minhas propostas e trabalhos" onPress={() => router.push('/mercado/minhas')} />
+        <LinkRow icon="briefcase" label="Minhas propostas e meus trabalhos" onPress={() => router.push('/mercado/minhas')} />
         <LinkRow icon="bar-chart-2" label="Meus ganhos e metas" onPress={() => router.push('/mercado/ganhos')} />
         <LinkRow icon="target" label="Meu objetivo no Clyvo" onPress={() => router.push('/mercado/comecar')} />
         <LinkRow icon="help-circle" label="Ajuda e suporte" onPress={() => router.push('/suporte')} />
-        <LinkRow icon="edit-3" label="Enviar sugestao" onPress={() => router.push('/sugestoes')} />
-        <LinkRow icon="user-x" label="Usuarios bloqueados" onPress={() => router.push('/mercado/bloqueados')} />
+        <LinkRow icon="edit-3" label="Enviar sugestão" onPress={() => router.push('/sugestoes')} />
+        <LinkRow icon="user-x" label="Usuários bloqueados" onPress={() => router.push('/mercado/bloqueados')} />
         <LinkRow icon="shield" label="Regras do marketplace" onPress={() => router.push('/regras-mercado')} last />
       </Card>
       <Text style={styles.sectionTitle}>Atalhos</Text>
       <Card style={styles.card}>
-        <LinkRow icon="bell" label="Lembretes no celular" onPress={() => router.push('/lembretes-celular')} />
-        <LinkRow icon="moon" label="Aparencia" onPress={() => router.push('/aparencia')} />
-        <LinkRow icon="message-circle" label="Perguntar a Cly" onPress={() => router.push('/cly')} />
-        <LinkRow icon="package" label="Catalogo" onPress={() => router.push('/catalogo')} />
-        <LinkRow icon="bell" label="Follow-ups" onPress={() => router.push('/follow-ups')} />
+        <LinkRow icon="bell" label="Lembretes" onPress={() => router.push('/lembretes-celular')} />
+        <LinkRow icon="moon" label="Aparência" onPress={() => router.push('/aparencia')} />
+        <LinkRow icon="message-circle" label="Perguntar à Cly" onPress={() => router.push('/cly')} />
+        <LinkRow icon="package" label="Catálogo" onPress={() => router.push('/catalogo')} />
+        <LinkRow icon="bell" label="Acompanhamentos" onPress={() => router.push('/follow-ups')} />
         <LinkRow
           icon="refresh-cw"
           label="Recuperar clientes"
           onPress={() => router.push('/recuperacao')}
         />
-        <LinkRow icon="inbox" label="Notificacoes" onPress={() => router.push('/notificacoes')} />
-        <LinkRow icon="award" label="Planos e assinatura" onPress={() => router.push('/planos')} last />
+        <LinkRow icon="inbox" label="Notificações" onPress={() => router.push('/notificacoes')} />
+        <LinkRow icon="award" label="Planos e assinaturas" onPress={() => router.push('/planos')} last />
       </Card>
 
-      <Text style={styles.sectionTitle}>Seu negocio</Text>
+      <Text style={styles.sectionTitle}>Seu negócio</Text>
       <Card style={styles.card}>
-        <Row icon="briefcase" label="Nome" value={company?.tradeName ?? 'Nao informado'} />
-        <Row icon="phone" label="WhatsApp" value={phone(user.whatsapp ?? user.phone) || 'Nao informado'} />
+        <Row icon="briefcase" label="Nome da empresa" value={company?.tradeName ?? 'Não informado'} />
+        <Row icon="phone" label="WhatsApp" value={phone(user.whatsapp ?? user.phone) || 'Não informado'} />
         <Row
           icon="map-pin"
           label="Cidade"
           value={
             company?.address.city
               ? `${company.address.city}${company.address.state ? ` - ${company.address.state}` : ''}`
-              : 'Nao informada'
+              : 'Não informada'
           }
         />
-        <Row icon="hash" label="CNPJ / CPF" value={company?.document ?? 'Nao informado'} last />
+        <Row icon="hash" label="CNPJ / CPF" value={company?.document ?? 'Não informado'} last />
       </Card>
 
       {plan ? (
@@ -109,27 +112,27 @@ export default function PerfilScreen() {
           <Card style={styles.card}>
             <Row
               icon="award"
-              label={plan.name}
+              label={plan.code === 'free' ? 'Plano gratuito' : plan.name}
               value={
                 account?.subscription?.pricePaid && account.subscription.pricePaid > 0
-                  ? `${currency(account.subscription.pricePaid, { cents: true })} por mes`
+                  ? `${currency(account.subscription.pricePaid, { cents: true })} por mês`
                   : plan.price > 0
-                    ? `${currency(plan.price, { cents: true })} por mes`
+                    ? `${currency(plan.price, { cents: true })} por mês`
                     : 'Gratuito'
               }
             />
             <Row
               icon="users"
               label="Clientes"
-              value={plan.limits.maxClients === null ? 'Ilimitados' : `Ate ${plan.limits.maxClients}`}
+              value={plan.limits.maxClients === null ? 'Sem limite' : `Até ${plan.limits.maxClients}`}
             />
             <Row
               icon="file-text"
-              label="Propostas por mes"
+              label="Propostas por mês"
               value={
                 plan.limits.maxQuotesPerMonth === null
-                  ? 'Ilimitadas'
-                  : `Ate ${plan.limits.maxQuotesPerMonth}`
+                  ? 'Sem limite'
+                  : `Até ${plan.limits.maxQuotesPerMonth}`
               }
               last
             />
@@ -141,7 +144,7 @@ export default function PerfilScreen() {
       <Card style={styles.card}>
         <LinkRow
           icon="shield"
-          label="Politica de Privacidade"
+          label="Política de Privacidade"
           onPress={() => router.push('/privacidade')}
         />
         <LinkRow icon="file-text" label="Termos de Uso" onPress={() => router.push('/termos')} last />
@@ -150,8 +153,8 @@ export default function PerfilScreen() {
       <Text style={styles.sectionTitle}>Minha conta</Text>
       <Card style={styles.card}>
         <LinkRow icon="download" label="Exportar meus dados" onPress={() => router.push('/exportar-dados')} />
-        <LinkRow icon="edit" label="Editar perfil e empresa" onPress={() => router.push('/editar-perfil')} />
-        <LinkRow icon="trash-2" label="Excluir conta e dados" onPress={() => router.push('/excluir-conta')} last />
+        <LinkRow icon="edit" label="Editar perfil e dados da empresa" onPress={() => router.push('/editar-perfil')} />
+        <LinkRow icon="trash-2" label="Excluir minha conta e meus dados" onPress={() => router.push('/excluir-conta')} last />
       </Card>
 
       <Button

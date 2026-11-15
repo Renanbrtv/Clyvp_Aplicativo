@@ -71,6 +71,13 @@
     ],
     "experiments": {
       "typedRoutes": false
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3a1bb277-8761-4415-8bd6-839eaf0d5950"
+      }
+    },
+    "owner": "renanlkzs-team"
   }
 }

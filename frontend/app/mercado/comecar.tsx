@@ -12,10 +12,10 @@ import {
 } from '../../src/features/marketplace/ui';
 const choices: Record<string, string> = {
   'Quero encontrar clientes': 'encontrar_clientes',
-  'Ja tenho clientes': 'tenho_clientes',
-  'Quero oferecer meus servicos': 'oferecer_servicos',
+  'Já tenho clientes': 'tenho_clientes',
+  'Quero oferecer meus serviços': 'oferecer_servicos',
   'Quero conseguir uma renda extra': 'renda_extra',
-  'Quero organizar meu negocio': 'organizar_negocio',
+  'Quero organizar meu negócio': 'organizar_negocio',
 };
 export default function Comecar() {
   const router = useRouter(),
@@ -23,18 +23,16 @@ export default function Comecar() {
   const [choice, setChoice] = useState('Quero encontrar clientes'),
     [accepted, setAccepted] = useState<string[]>([]);
   return (
-    <MarketScreen title="Seu proximo passo" subtitle="Voce nao precisa ter empresa ou CNPJ para comecar.">
+    <MarketScreen title="Seu proximo passo" subtitle="Você não precisa ter empresa ou CNPJ para começar.">
       <Choices
-        label="O que voce quer fazer com o Clyvo?"
+        label="O que você quer fazer com o Clyvo?"
         options={Object.keys(choices)}
         value={choice}
         onChange={setChoice}
       />
       <Card>
         <Note>
-          O marketplace conecta pessoas. Publicacoes e perfis profissionais visiveis podem ser vistos por
-          outros usuarios. Propostas e conversas sao privadas. Nao ha promessa de renda nem pagamento
-          intermediado pelo Clyvo.
+          O marketplace conecta pessoas. Publicações e perfis profissionais públicos podem ser vistos por outros usuários. Propostas e conversas sao privadas. Não há promessa de renda nem intermediação de pagamentos pelo Clyvo.
         </Note>
         <Button
           label="Ler regras, privacidade e seguranca"
@@ -60,7 +58,7 @@ export default function Comecar() {
               acceptRules: accepted.length > 0,
             });
             router.replace(
-              choice === 'Quero organizar meu negocio' || choice === 'Ja tenho clientes'
+              choice === 'Quero organizar meu negócio' || choice === 'Já tenho clientes'
                 ? '/(tabs)'
                 : '/mercado',
             );
@@ -68,8 +66,7 @@ export default function Comecar() {
         }
       />
       <Note>
-        Voce pode explorar sem aceitar as regras. Para publicar, enviar propostas e conversar sera necessario
-        aceita-las.
+        Você pode explorar sem aceitar as regras. Para publicar, enviar propostas e conversar, será necessário aceitá-las.
       </Note>
     </MarketScreen>
   );

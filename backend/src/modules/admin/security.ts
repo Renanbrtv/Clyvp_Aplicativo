@@ -14,6 +14,12 @@ export function tokenFrom(req: Request) {
  return /^[a-f0-9]{64}$/.test(raw) ? raw : '';
 }
 export function checkOrigin(req: Request) {
+ // DIAGNOSTICO_ORIGEM_ADMIN
+ console.warn('[ADMIN ORIGIN]', JSON.stringify({
+   recebida: req.get('origin') ?? '(ausente)',
+   configurada: process.env.ADMIN_ORIGIN ?? '(ausente)',
+   corresponde: req.get('origin') === process.env.ADMIN_ORIGIN
+ }));
  const configured = process.env.ADMIN_ORIGIN;
  if (!configured || (env.isProduction && !configured.startsWith('https://')) || req.get('origin') !== configured) throw AppError.forbidden('Origem administrativa não autorizada.');
 }

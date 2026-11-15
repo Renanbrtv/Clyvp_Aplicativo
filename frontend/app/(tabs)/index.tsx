@@ -44,7 +44,7 @@ export default function InicioScreen() {
       setError(
         loadError instanceof ApiError
           ? loadError.message
-          : 'Nao foi possivel carregar o seu resumo.',
+          : 'Não foi possível carregar seu resumo.',
       );
     } finally {
       setLoading(false);
@@ -62,7 +62,7 @@ export default function InicioScreen() {
     return (
       <Screen>
         <AppHeader userName={userName} />
-        <LoadingState label="Montando o seu resumo..." />
+        <LoadingState label="Preparando seu resumo..." />
       </Screen>
     );
   }
@@ -101,15 +101,15 @@ export default function InicioScreen() {
       />
 
       <View style={styles.greeting}>
-        <Text style={styles.hello}>Ola, {summary.user.firstName}</Text>
+        <Text style={styles.hello}>Olá, {summary.user.firstName}</Text>
         <Text style={styles.tagline}>Vamos transformar conversas em vendas?</Text>
       </View>
 
       <DashboardMarket />
-      <Button label="Perguntar a Cly" icon="message-circle" variant="outline" onPress={() => router.push('/cly')} />
+      <Button label="Perguntar à Cly" icon="message-circle" variant="outline" onPress={() => router.push('/cly')} />
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Resumo do mes</Text>
+        <Text style={styles.sectionTitle}>Resumo do mês</Text>
         <View style={styles.monthChip}>
           <Text style={styles.monthText}>{summary.period.label}</Text>
         </View>
@@ -134,16 +134,20 @@ export default function InicioScreen() {
         <ActionCard
           icon="users"
           label="Clientes"
-          badge={`${summary.clients.total} cadastrados`}
+          badge={
+            summary.clients.total === 0
+              ? 'Nenhum cliente cadastrado'
+              : `${summary.clients.total} ${summary.clients.total === 1 ? 'cliente cadastrado' : 'clientes cadastrados'}`
+          }
           onPress={() => router.push('/(tabs)/clientes')}
         />
         <ActionCard
           icon="file-text"
-          label="Orcamentos"
+          label="Orçamentos"
           badge={
             summary.quotes.pendingCount > 0
-              ? `${summary.quotes.pendingCount} pendentes`
-              : 'Nenhum pendente'
+              ? `${summary.quotes.pendingCount} ${summary.quotes.pendingCount === 1 ? 'orçamento pendente' : 'orçamentos pendentes'}`
+              : 'Nenhum orçamento pendente'
           }
           onPress={() => router.push('/(tabs)/oportunidades')}
         />
@@ -157,7 +161,7 @@ export default function InicioScreen() {
       />
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Precisa da sua atencao</Text>
+        <Text style={styles.sectionTitle}>Precisa da sua atenção</Text>
         {hasAttention ? (
           <Pressable onPress={() => router.push('/recuperacao')} hitSlop={theme.hitSlop}>
             <Text style={styles.sectionAction}>Ver todos</Text>
@@ -172,8 +176,8 @@ export default function InicioScreen() {
           ))}
 
           <Text style={styles.footnote}>
-            Somando {currency(summary.needsAttention.reduce((sum, item) => sum + item.amount, 0))} em
-            propostas paradas ha {summary.followUpDays} dias ou mais.
+            Você tem {currency(summary.needsAttention.reduce((sum, item) => sum + item.amount, 0))} em
+            propostas sem movimentação há {summary.followUpDays} dias ou mais.
           </Text>
         </View>
       ) : (
@@ -181,7 +185,7 @@ export default function InicioScreen() {
           <EmptyState
             icon="check-circle"
             title="Tudo em dia"
-            message="Nenhum cliente esperando resposta. Quando alguem ficar parado, ele aparece aqui."
+            message="Nenhum cliente está aguardando uma resposta. Quando houver algo pendente, aparecerá aqui."
           />
         </View>
       )}

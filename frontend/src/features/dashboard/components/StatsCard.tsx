@@ -11,7 +11,7 @@ interface StatsCardProps {
   waitingResponse: number;
 }
 
-/** Card branco com oportunidades em aberto, negociacoes e pendencias. */
+/** Cartão branco com oportunidades em aberto, negociações e pendências. */
 export function StatsCard({ openTotal, negotiations, waitingResponse }: StatsCardProps) {
   useThemeMode();
   return (
@@ -29,7 +29,7 @@ export function StatsCard({ openTotal, negotiations, waitingResponse }: StatsCar
           <Feather name="target" size={18} color={theme.colors.primary} />
           <Text style={styles.sideValue}>{negotiations}</Text>
         </View>
-        <Text style={styles.sideLabel}>Negociacoes</Text>
+        <Text style={styles.sideLabel}>Negociações</Text>
       </View>
 
       <View style={styles.divider} />

@@ -50,7 +50,7 @@ export default function ClientesScreen() {
         const data = await clientsApi.list({ search: search || undefined, filter });
         setClients(data.clients);
       } catch (loadError) {
-        setError(loadError instanceof ApiError ? loadError.message : 'Nao foi possivel carregar os clientes.');
+        setError(loadError instanceof ApiError ? loadError.message : 'Não foi possível carregar os clientes.');
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -59,7 +59,7 @@ export default function ClientesScreen() {
     [search, filter],
   );
 
-  // Busca com atraso para nao disparar a cada tecla.
+  // Busca com atraso para não disparar a cada tecla.
   useEffect(() => {
     const timer = setTimeout(() => void load(), search ? 350 : 0);
     return () => clearTimeout(timer);
@@ -73,8 +73,8 @@ export default function ClientesScreen() {
 
   const emptyMessage = useMemo(() => {
     if (search) return `Nenhum cliente encontrado para "${search}".`;
-    if (filter === 'sem_contato') return 'Nenhum cliente parado. Sua carteira esta em dia.';
-    if (filter === 'recorrentes') return 'Ainda nao ha clientes com duas compras ou mais.';
+    if (filter === 'sem_contato') return 'Nenhum cliente está sem contato. Sua carteira está em dia.';
+    if (filter === 'recorrentes') return 'Ainda não há clientes com duas compras ou mais.';
     if (filter === 'alto_valor') return 'Nenhuma compra registrada ainda.';
     return 'Cadastre o primeiro cliente e comece a transformar conversas em vendas.';
   }, [search, filter]);
@@ -158,7 +158,7 @@ export default function ClientesScreen() {
           {
             icon: 'zap',
             label: 'Nova oportunidade',
-            description: 'Comece uma negociacao',
+            description: 'Comece uma negociação',
             onPress: () => router.push('/oportunidade/nova'),
           },
         ]}

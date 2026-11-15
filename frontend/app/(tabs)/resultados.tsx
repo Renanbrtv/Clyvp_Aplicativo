@@ -34,7 +34,7 @@ export default function ResultadosScreen() {
       const data = await statsApi.results();
       setResults(data);
     } catch (loadError) {
-      setError(loadError instanceof ApiError ? loadError.message : 'Nao foi possivel carregar os resultados.');
+      setError(loadError instanceof ApiError ? loadError.message : 'Não foi possível carregar os resultados.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -51,7 +51,7 @@ export default function ResultadosScreen() {
     return (
       <Screen>
         <AppHeader userName={user?.name ?? ''} />
-        <LoadingState label="Somando seus numeros..." />
+        <LoadingState label="Carregando seus resultados..." />
       </Screen>
     );
   }
@@ -86,28 +86,30 @@ export default function ResultadosScreen() {
       </View>
 
       <Card tone="primary" style={styles.hero}>
-        <Text style={styles.heroLabel}>Vendas do mes</Text>
+        <Text style={styles.heroLabel}>Vendas do mês</Text>
         <Text style={styles.heroValue}>{currency(results.sales.total)}</Text>
         <Text style={styles.heroMeta}>
           {results.sales.count} {results.sales.count === 1 ? 'venda' : 'vendas'}
           {results.sales.variationPercent !== null
-            ? ` · ${percent(results.sales.variationPercent)} vs mes anterior`
+            ? ` · ${percent(results.sales.variationPercent)} em relação ao mês anterior`
             : ''}
         </Text>
       </Card>
 
       <View style={styles.grid}>
         <Metric label="Oportunidades" value={currency(results.pipeline.openTotal)} hint="em aberto" />
-        <Metric label="Ticket medio" value={currency(results.sales.averageTicket)} hint="por venda" />
-        <Metric label="Conversao" value={`${results.conversion.rate}%`} hint="oportunidades fechadas" />
+        <Metric label="Ticket médio" value={currency(results.sales.averageTicket)} hint="por venda" />
+        <Metric label="Conversão" value={`${results.conversion.rate}%`} hint="oportunidades fechadas" />
         <Metric
           label="Propostas"
           value={`${results.conversion.quoteRate}%`}
-          hint={`${results.quotes.accepted} de ${results.quotes.sent} aceitas`}
+          hint={`${results.quotes.accepted} de ${results.quotes.sent} ${
+            results.quotes.sent === 1 ? 'proposta aceita' : 'propostas aceitas'
+          }`}
         />
       </View>
 
-      <Text style={styles.sectionTitle}>Vendas nos ultimos 6 meses</Text>
+      <Text style={styles.sectionTitle}>Vendas nos últimos 6 meses</Text>
       <Card style={styles.chartCard}>
         <MonthlyChart series={results.monthlySeries} />
         <View style={styles.chartLabels}>
@@ -128,10 +130,10 @@ export default function ResultadosScreen() {
         <Row label="Rascunhos" value={String(results.quotes.draft)} last />
       </Card>
 
-      <Text style={styles.sectionTitle}>Pipeline</Text>
+      <Text style={styles.sectionTitle}>Funil de oportunidades</Text>
       <Card style={styles.list}>
         {results.pipeline.byStatus.length === 0 ? (
-          <Text style={styles.empty}>Nenhuma oportunidade criada neste mes.</Text>
+          <Text style={styles.empty}>Nenhuma oportunidade foi criada neste mês.</Text>
         ) : (
           results.pipeline.byStatus.map((item, index) => (
             <Row
@@ -146,14 +148,19 @@ export default function ResultadosScreen() {
 
       <Text style={styles.sectionTitle}>Clientes</Text>
       <Card style={styles.list}>
-        <Row label="Novos no mes" value={String(results.clients.new)} />
+        <Row label="Novos clientes no mês" value={String(results.clients.new)} />
         <Row label="Recorrentes" value={String(results.clients.recurring)} />
-        <Row label="Valor perdido" value={currency(results.lost.total)} tone="danger" last />
+        <Row
+          label="Valor em oportunidades perdidas"
+          value={currency(results.lost.total)}
+          tone="danger"
+          last
+        />
       </Card>
 
       {results.topServices.length > 0 ? (
         <>
-          <Text style={styles.sectionTitle}>Servicos mais vendidos</Text>
+          <Text style={styles.sectionTitle}>Serviços mais vendidos</Text>
           <Card style={styles.list}>
             {results.topServices.map((item, index) => (
               <Row
@@ -222,7 +229,7 @@ function Row({
   );
 }
 
-/** Grafico de barras simples, com os totais reais de cada mes. */
+/** Gráfico de barras simples, com os totais reais de cada mês. */
 function MonthlyChart({ series }: { series: Results['monthlySeries'] }) {
   useThemeMode();
   const height = 120;

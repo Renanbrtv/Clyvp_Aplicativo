@@ -14,35 +14,35 @@ interface AttentionCardProps {
 }
 
 /**
- * Card da secao "Precisa da sua atencao".
+ * Cartão da seção "Precisa da sua atenção".
  * O botao abre o WhatsApp com a mensagem de retomada ja escrita - e o
- * primeiro pedaco da funcionalidade de recuperacao de clientes.
+ * primeiro passo da funcionalidade de recuperação de clientes.
  */
 export function AttentionCard({ item, userName }: AttentionCardProps) {
   useThemeMode();
   const firstName = item.clientName.split(' ')[0];
 
   const message =
-    `Ola, ${firstName}! Tudo bem?\n\n` +
-    `Passando para saber se conseguiu analisar a proposta que te enviei` +
-    (item.quoteNumber ? ` (proposta #${String(item.quoteNumber).padStart(4, '0')})` : '') +
-    `.\n\nCaso tenha alguma duvida ou queira ajustar algum item, posso verificar para voce.\n\n` +
-    `Fico a disposicao!\n${userName}`;
+    `Olá, ${firstName}! Tudo bem?\n\n` +
+    `Gostaria de saber se você conseguiu analisar a proposta que enviei` +
+    (item.quoteNumber ? ` (proposta nº ${String(item.quoteNumber).padStart(4, '0')})` : '') +
+    `.\n\nCaso tenha alguma dúvida ou queira ajustar algum item, posso verificar para você.\n\n` +
+    `Fico à disposição!\n${userName}`;
 
   async function handleContact() {
     const link = whatsappLink(item.whatsapp, message);
 
     if (!link) {
       Alert.alert(
-        'Sem WhatsApp cadastrado',
-        `${item.clientName} ainda nao tem um numero valido no cadastro.`,
+        'WhatsApp não cadastrado',
+        `${item.clientName} ainda não tem um número válido cadastrado.`,
       );
       return;
     }
 
     const canOpen = await Linking.canOpenURL(link);
     if (!canOpen) {
-      Alert.alert('WhatsApp nao encontrado', 'Instale o WhatsApp para enviar a mensagem.');
+      Alert.alert('WhatsApp não encontrado', 'Instale o WhatsApp para enviar a mensagem.');
       return;
     }
 
@@ -59,7 +59,7 @@ export function AttentionCard({ item, userName }: AttentionCardProps) {
             {item.clientName}
           </Text>
           <Text style={styles.detail} numberOfLines={1}>
-            {item.quoteNumber ? 'Orcamento' : item.statusLabel} de {currency(item.amount)}
+            {item.quoteNumber ? 'Orçamento' : item.statusLabel} de {currency(item.amount)}
           </Text>
           <View style={styles.alertRow}>
             <Feather name="clock" size={13} color={theme.colors.danger} />

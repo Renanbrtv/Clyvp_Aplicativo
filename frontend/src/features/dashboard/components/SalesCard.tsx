@@ -13,7 +13,7 @@ interface SalesCardProps {
   series: number[];
 }
 
-/** Card laranja "Vendas do mes" da tela Inicio. */
+/** Cartão laranja "Vendas do mês" da tela Início. */
 export function SalesCard({ total, variationPercent, previousLabel, series }: SalesCardProps) {
   useThemeMode();
   const positive = (variationPercent ?? 0) >= 0;
@@ -21,13 +21,13 @@ export function SalesCard({ total, variationPercent, previousLabel, series }: Sa
   return (
     <Card tone="primary" style={styles.card}>
       <View style={styles.left}>
-        <Text style={styles.label}>Vendas do mes</Text>
+        <Text style={styles.label}>Vendas do mês</Text>
         <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
           {currency(total)}
         </Text>
 
         {variationPercent === null ? (
-          <Text style={styles.comparison}>Primeiro mes com vendas registradas</Text>
+          <Text style={styles.comparison}>Primeiro mês com vendas registradas</Text>
         ) : (
           <View style={styles.variationRow}>
             <View style={styles.badge}>
@@ -38,7 +38,7 @@ export function SalesCard({ total, variationPercent, previousLabel, series }: Sa
               />
               <Text style={styles.badgeText}>{percent(variationPercent)}</Text>
             </View>
-            <Text style={styles.comparison}>em relacao a {previousLabel.toLowerCase()}</Text>
+            <Text style={styles.comparison}>em relação a {previousLabel.toLowerCase()}</Text>
           </View>
         )}
       </View>

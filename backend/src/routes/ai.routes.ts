@@ -14,7 +14,7 @@ router.use(authenticate);
 
 router.get('/status', asyncHandler(aiController.status));
 router.post('/consent', authRateLimiter, validate(z.object({ accepted: z.boolean() }).strict()), asyncHandler(aiController.consent));
-router.post('/generate', authRateLimiter, validate(z.object({ action: z.enum(['mensagem','descricao','proposta']), text: z.string().trim().min(2).max(2000) }).strict()), asyncHandler(aiController.generate));
+router.post('/generate', authRateLimiter, validate(z.object({ action: z.enum(['mensagem','descricao','proposta','conversa']), text: z.string().trim().min(2).max(2000) }).strict()), asyncHandler(aiController.generate));
 router.use(authRateLimiter);
 router.post('/proposta', validate(generateProposalSchema), asyncHandler(aiController.proposal));
 router.post('/mensagem', validate(generateMessageSchema), asyncHandler(aiController.message));

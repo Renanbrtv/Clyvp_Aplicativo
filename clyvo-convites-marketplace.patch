@@ -1,0 +1,606 @@
+From 11ce62ae32dfa5110299b5834b8530e11a3ed3e5 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Fri, 13 Nov 2026 15:26:24 -0300
+Subject: [PATCH] Add private marketplace project invitations
+
+---
+ backend/src/modules/marketplace/routes.ts     |  29 +++
+ backend/src/modules/marketplace/service.ts    | 178 +++++++++++++++++-
+ backend/src/repositories/export.repository.ts |   1 +
+ backend/src/scripts/marketplace-test.ts       |  30 +++
+ database/marketplace.sql                      |  17 ++
+ frontend/app/mercado/convidar.tsx             |  34 ++++
+ frontend/app/mercado/convite.tsx              |  81 ++++++++
+ frontend/app/mercado/convites.tsx             |  31 +++
+ frontend/app/mercado/index.tsx                |   1 +
+ frontend/app/mercado/perfil-profissional.tsx  |   6 +-
+ .../src/features/marketplace/RulesConsent.tsx |   6 +-
+ 11 files changed, 399 insertions(+), 15 deletions(-)
+ create mode 100644 frontend/app/mercado/convidar.tsx
+ create mode 100644 frontend/app/mercado/convite.tsx
+ create mode 100644 frontend/app/mercado/convites.tsx
+
+diff --git a/backend/src/modules/marketplace/routes.ts b/backend/src/modules/marketplace/routes.ts
+index dc2e9ee..9cbeeea 100644
+--- a/backend/src/modules/marketplace/routes.ts
++++ b/backend/src/modules/marketplace/routes.ts
+@@ -7,6 +7,8 @@ import { asyncHandler, sendSuccess } from '../../utils/http';
+ import { AppError } from '../../utils/app-error';
+ import { marketService as s } from './service';
+ import {
++  day,
++  money,
+   profileSchema,
+   postSchema,
+   proposalSchema,
+@@ -65,6 +67,33 @@ router.get(
+   '/profiles/:id',
+   run((uid, r) => s.profile(uid, id(r.params.id))),
+ );
++router.post('/profiles/:id/invites',
++  validate(z.object({
++    title: z.string().trim().min(5).max(120),
++    description: z.string().trim().min(15).max(2000),
++    acceptRules: z.boolean().optional(),
++  }).strict()),
++  run((uid, r) => s.inviteProfessional(uid, id(r.params.id), r.body)));
++router.get('/invites', run((uid) => s.invites(uid)));
++router.get('/invites/:id', run((uid, r) => s.invite(uid, id(r.params.id))));
++router.post('/invites/:id/respond',
++  validate(z.discriminatedUnion('action', [
++    z.object({ action: z.literal('reply'), message: z.string().trim().min(1).max(1000) }).strict(),
++    z.object({ action: z.literal('decline') }).strict(),
++    z.object({ action: z.literal('cancel') }).strict(),
++  ])),
++  run((uid, r) => s.respondInvite(uid, id(r.params.id), r.body)));
++router.post('/invites/:id/proposal',
++  validate(z.object({
++    amount: money.positive(),
++    dueDate: day.refine((v) => v >= new Date().toISOString().slice(0, 10), 'Escolha uma data futura.'),
++    message: z.string().trim().min(10).max(2000),
++  }).strict()),
++  run((uid, r) => s.proposeInvite(uid, id(r.params.id), r.body)));
++router.post('/invites/:id/whatsapp',
++  validate(z.object({ enabled: z.boolean() }).strict()),
++  run((uid, r) => s.shareInviteWhatsapp(uid, id(r.params.id), r.body.enabled)));
++router.post('/invites/:id/accept', run((uid, r) => s.acceptInvite(uid, id(r.params.id))));
+ const list = z
+   .object({
+     search: z.string().trim().max(100).optional(),
+diff --git a/backend/src/modules/marketplace/service.ts b/backend/src/modules/marketplace/service.ts
+index 196db20..fae098a 100644
+--- a/backend/src/modules/marketplace/service.ts
++++ b/backend/src/modules/marketplace/service.ts
+@@ -6,6 +6,7 @@ import { subscriptionRepository } from '../../repositories/subscription.reposito
+ import { planLimitService } from '../../services/plan-limit.service';
+ import { billingService } from '../../services/billing.service';
+ import { AppError } from '../../utils/app-error';
++import { whatsappService } from '../../services/whatsapp.service';
+ import { supportService } from '../../services/support.service';
+ import { cleanImage } from './images';
+ import {
+@@ -75,8 +76,13 @@ async function quota(id: number, kind: 'offers' | 'posts' | 'views') {
+     kind === 'views'
+       ? (await row('SELECT COUNT(*) n FROM market_views WHERE user_id=? AND month_key=?', [id, month()]))!.n
+       : (await row(
+-          `SELECT COUNT(*) n FROM ${kind === 'offers' ? 'market_proposals' : 'market_posts'} WHERE ${kind === 'offers' ? 'professional_id' : 'owner_id'}=? AND created_at>=?`,
+-          [id, month() + '-01'],
++          kind === 'offers'
++            ? `SELECT (SELECT COUNT(*) FROM market_proposals a WHERE a.professional_id=? AND a.created_at>=?
++                AND NOT EXISTS(SELECT 1 FROM market_works w JOIN market_project_invites i ON i.work_id=w.id WHERE w.proposal_id=a.id))
++                + (SELECT COUNT(*) FROM market_project_invites WHERE professional_id=? AND proposed_at>=?) n`
++            : `SELECT COUNT(*) n FROM market_posts p WHERE p.owner_id=? AND p.created_at>=?
++                AND NOT EXISTS(SELECT 1 FROM market_works w JOIN market_project_invites i ON i.work_id=w.id WHERE w.post_id=p.id)`,
++          kind === 'offers' ? [id, month() + '-01', id, month() + '-01'] : [id, month() + '-01'],
+         ))!.n;
+   if (n >= limit)
+     throw new AppError(
+@@ -134,6 +140,33 @@ async function acceptPostRules(id: number, accepted?: boolean) {
+     ON DUPLICATE KEY UPDATE consent_version=VALUES(consent_version),consent_at=VALUES(consent_at)`, [id,RULES_VERSION]);
+   await consent(id);
+ }
++async function projectInvite(actor: number, id: number, lock = false) {
++  const invite = await row(
++    `SELECT * FROM market_project_invites WHERE id=? AND (customer_id=? OR professional_id=?) ${lock ? 'FOR UPDATE' : ''}`,
++    [id, actor, actor],
++  );
++  if (!invite) throw AppError.notFound('Convite não encontrado.');
++  return invite;
++}
++
++async function checkInvitePair(customer: number, professional: number) {
++  await assertPair(customer, professional);
++  await active(customer);
++  await active(professional);
++  const accounts = await rows("SELECT id FROM users WHERE id IN (?,?) AND status='ativo'", [customer, professional]);
++  if (accounts.length !== 2) throw AppError.notFound('Uma das contas está indisponível.');
++}
++
++async function mutateInvite<T>(actor: number, id: number, fn: (invite: Row) => Promise<T>) {
++  const initial = await projectInvite(actor, id);
++  return withTransaction(async () => {
++    await lockUsers(initial.customer_id, initial.professional_id);
++    const invite = await projectInvite(actor, id, true);
++    await checkInvitePair(invite.customer_id, invite.professional_id);
++    return fn(invite);
++  });
++}
++
+ export const marketService = {
+   async me(id: number) {
+     const [preferences, profile, p] = await Promise.all([
+@@ -142,8 +175,13 @@ export const marketService = {
+       plan(id),
+     ]);
+     const usage = await row(
+-      `SELECT (SELECT COUNT(*) FROM market_proposals WHERE professional_id=? AND created_at>=?) offers,(SELECT COUNT(*) FROM market_posts WHERE owner_id=? AND created_at>=?) posts,(SELECT COUNT(*) FROM market_views WHERE user_id=? AND month_key=?) views`,
+-      [id, month() + '-01', id, month() + '-01', id, month()],
++      `SELECT (SELECT COUNT(*) FROM market_proposals a WHERE a.professional_id=? AND a.created_at>=?
++        AND NOT EXISTS(SELECT 1 FROM market_works w JOIN market_project_invites i ON i.work_id=w.id WHERE w.proposal_id=a.id))
++        + (SELECT COUNT(*) FROM market_project_invites WHERE professional_id=? AND proposed_at>=?) offers,
++        (SELECT COUNT(*) FROM market_posts p WHERE p.owner_id=? AND p.created_at>=?
++        AND NOT EXISTS(SELECT 1 FROM market_works w JOIN market_project_invites i ON i.work_id=w.id WHERE w.post_id=p.id)) posts,
++        (SELECT COUNT(*) FROM market_views WHERE user_id=? AND month_key=?) views`,
++      [id, month() + '-01', id, month() + '-01', id, month() + '-01', id, month()],
+     );
+     return {
+       accountId: id,
+@@ -228,6 +266,123 @@ export const marketService = {
+       ),
+     };
+   },
++  async inviteProfessional(actor: number, target: number, input: { title: string; description: string; acceptRules?: boolean }) {
++    if (actor === target) throw AppError.badRequest('Escolha outro profissional.');
++    return withTransaction(async () => {
++      await lockUsers(actor, target);
++      await checkInvitePair(actor, target);
++      await acceptPostRules(actor, input.acceptRules);
++      const profile = await row('SELECT published FROM market_profiles WHERE user_id=?', [target]);
++      if (!profile?.published || (await reviewState('profile', target)).state !== 'approved')
++        throw AppError.notFound('Perfil profissional indisponível.');
++      if (await row("SELECT id FROM market_project_invites WHERE customer_id=? AND professional_id=? AND status IN ('pendente','respondido','proposta') LIMIT 1", [actor, target]))
++        throw AppError.conflict('Já existe um convite em aberto para esse profissional.');
++      const count = await row('SELECT COUNT(*) n FROM market_project_invites WHERE customer_id=? AND created_at>=UTC_DATE()', [actor]);
++      if (Number(count?.n) >= 10) throw AppError.conflict('Limite diário de convites atingido. Tente amanhã.');
++      const result = await execute('INSERT INTO market_project_invites(customer_id,professional_id,title,description) VALUES(?,?,?,?)',
++        [actor, target, input.title, input.description]);
++      return { id: result.insertId };
++    });
++  },
++  async invites(actor: number) {
++    const invites = await rows(
++      `SELECT i.id,i.title,i.status,i.created_at,
++        IF(i.customer_id=?,'enviado','recebido') direction,
++        IF(i.customer_id=?,COALESCE(mp.name,p.name),c.name) counterpart
++      FROM market_project_invites i JOIN users c ON c.id=i.customer_id JOIN users p ON p.id=i.professional_id
++      LEFT JOIN market_profiles mp ON mp.user_id=p.id
++      WHERE (i.customer_id=? OR i.professional_id=?) AND c.status='ativo' AND p.status='ativo'
++      AND NOT EXISTS(SELECT 1 FROM market_blocks b WHERE (b.user_id=i.customer_id AND b.target_id=i.professional_id) OR (b.user_id=i.professional_id AND b.target_id=i.customer_id))
++      AND NOT EXISTS(SELECT 1 FROM market_suspensions s WHERE s.user_id IN (i.customer_id,i.professional_id))
++      ORDER BY i.id DESC LIMIT 100`, [actor, actor, actor, actor],
++    );
++    return { invites };
++  },
++  async invite(actor: number, id: number) {
++    const invite = await projectInvite(actor, id);
++    await checkInvitePair(invite.customer_id, invite.professional_id);
++    const sender = actor === invite.customer_id;
++    const counterpartId = sender ? invite.professional_id : invite.customer_id;
++    const shareAllowed = !['recusado','cancelado'].includes(invite.status);
++    const sharing = Boolean(sender ? invite.customer_whatsapp_ok : invite.professional_whatsapp_ok);
++    const otherSharing = Boolean(sender ? invite.professional_whatsapp_ok : invite.customer_whatsapp_ok);
++    const contact = shareAllowed && sharing && otherSharing
++      ? await row('SELECT whatsapp FROM users WHERE id=?', [counterpartId]) : null;
++    return {
++      shareAllowed, sharing, otherSharing,
++      whatsappLink: contact?.whatsapp ? whatsappService.link(contact.whatsapp, 'Olá! Sobre o projeto no Clyvo: ' + invite.title) : null,
++      id: invite.id, title: invite.title, description: invite.description, status: invite.status,
++      reply: invite.reply, amount: invite.amount, dueDate: invite.due_date ? date(invite.due_date) : null,
++      proposalMessage: invite.proposal_message, workId: invite.work_id,
++      direction: actor === invite.customer_id ? 'enviado' : 'recebido',
++      counterpartId,
++    };
++  },
++  async shareInviteWhatsapp(actor: number, id: number, enabled: boolean) {
++    return mutateInvite(actor, id, async (invite) => {
++      if (enabled) {
++        if (['recusado','cancelado'].includes(invite.status)) throw AppError.conflict('O convite está encerrado.');
++        const contact = await row('SELECT whatsapp FROM users WHERE id=?', [actor]);
++        if (!whatsappService.link(contact?.whatsapp, '')) throw AppError.badRequest('Cadastre um WhatsApp válido no seu perfil primeiro.');
++      }
++      const field = actor === invite.customer_id ? 'customer_whatsapp_ok' : 'professional_whatsapp_ok';
++      await execute(`UPDATE market_project_invites SET ${field}=? WHERE id=?`, [enabled ? 1 : 0, id]);
++      return { sharing: enabled };
++    });
++  },
++  async respondInvite(actor: number, id: number, input: { action: 'reply' | 'decline' | 'cancel'; message?: string }) {
++    return mutateInvite(actor, id, async (invite) => {
++      const isSender = actor === invite.customer_id;
++      if (isSender !== (input.action === 'cancel')) throw AppError.forbidden('Esta ação não está disponível para sua conta.');
++      const status = input.action === 'reply' ? 'respondido' : input.action === 'decline' ? 'recusado' : 'cancelado';
++      if (input.action === 'reply' ? invite.status !== 'pendente' : !['pendente','respondido','proposta'].includes(invite.status))
++        throw AppError.conflict('O convite não está mais disponível para esta ação.');
++      if (input.action === 'reply') {
++        await execute('UPDATE market_project_invites SET status=?,reply=? WHERE id=?', [status, input.message, id]);
++      } else {
++        await execute('UPDATE market_project_invites SET status=? WHERE id=?', [status, id]);
++      }
++      return { status };
++    });
++  },
++  async proposeInvite(actor: number, id: number, input: { amount: number; dueDate: string; message: string }) {
++    return mutateInvite(actor, id, async (invite) => {
++      if (actor !== invite.professional_id) throw AppError.forbidden('Somente o profissional convidado pode propor.');
++      if (!['pendente','respondido'].includes(invite.status)) throw AppError.conflict('O convite não aceita nova proposta.');
++      await consent(actor);
++      const profile = await row('SELECT published FROM market_profiles WHERE user_id=?', [actor]);
++      if (!profile?.published || (await reviewState('profile', actor)).state !== 'approved')
++        throw AppError.conflict('Seu perfil precisa estar publicado e aprovado.');
++      await quota(actor, 'offers');
++      await execute("UPDATE market_project_invites SET status='proposta',amount=?,due_date=?,proposal_message=?,proposed_at=UTC_TIMESTAMP() WHERE id=?",
++        [input.amount, input.dueDate, input.message, id]);
++      return { status: 'proposta' };
++    });
++  },
++  async acceptInvite(actor: number, id: number) {
++    return mutateInvite(actor, id, async (invite) => {
++      if (actor !== invite.customer_id) throw AppError.forbidden('Somente quem enviou o convite pode aceitar.');
++      if (invite.status === 'contratado' && invite.work_id) return { workId: invite.work_id };
++      if (invite.status !== 'proposta' || date(invite.due_date) < new Date().toISOString().slice(0, 10))
++        throw AppError.conflict('Não há uma proposta válida para aceitar.');
++      // The private post is never published. It exists to reuse the current work,
++      // completion, payment tracking and review flows without changing their schema.
++      const post = await execute(
++        "INSERT INTO market_posts(owner_id,title,category,description,mode,photos,status,hidden) VALUES(?,?,'Outros',?,'remoto','[]','contratada',1)",
++        [actor, invite.title, invite.description],
++      );
++      const proposal = await execute(
++        "INSERT INTO market_proposals(post_id,professional_id,amount,due_date,message,experience,status) VALUES(?,?,?,?,?,'','aceita')",
++        [post.insertId, invite.professional_id, invite.amount, date(invite.due_date), invite.proposal_message],
++      );
++      const work = await execute(
++        'INSERT INTO market_works(post_id,proposal_id,customer_id,professional_id,title,amount,due_date) VALUES(?,?,?,?,?,?,?)',
++        [post.insertId, proposal.insertId, actor, invite.professional_id, invite.title, invite.amount, date(invite.due_date)],
++      );
++      await execute("UPDATE market_project_invites SET status='contratado',work_id=? WHERE id=?", [work.insertId, id]);
++      return { workId: work.insertId };
++    });
++  },
+   async posts(
+     viewer: number,
+     f: {
+@@ -474,11 +629,11 @@ export const marketService = {
+         (SELECT COUNT(*) FROM market_proposals a WHERE a.post_id=p.id) proposal_count,
+         JSON_UNQUOTE(JSON_EXTRACT(p.photos,'$[0]')) thumbnail
+         FROM market_posts p LEFT JOIN market_content_reviews cr ON cr.target_type='post' AND cr.target_id=p.id
+-        WHERE p.owner_id=? ORDER BY p.id DESC LIMIT 100`, [id])).map(
++        WHERE p.owner_id=? AND NOT EXISTS(SELECT 1 FROM market_project_invites i JOIN market_works w ON w.id=i.work_id WHERE w.post_id=p.id) ORDER BY p.id DESC LIMIT 100`, [id])).map(
+         (p) => ({ ...postData(p), photos: undefined }),
+       ),
+       proposals: await rows(
+-        `SELECT a.*,IF(p.hidden=0 AND ${approvedPost},p.title,'Publicação indisponível ou em análise') title,p.status post_status,(p.hidden=0 AND ${approvedPost}) post_visible FROM market_proposals a JOIN market_posts p ON p.id=a.post_id WHERE a.professional_id=? ORDER BY a.id DESC LIMIT 100`,
++        `SELECT a.*,IF(p.hidden=0 AND ${approvedPost},p.title,'Publicação indisponível ou em análise') title,p.status post_status,(p.hidden=0 AND ${approvedPost}) post_visible FROM market_proposals a JOIN market_posts p ON p.id=a.post_id WHERE a.professional_id=? AND NOT EXISTS(SELECT 1 FROM market_project_invites i JOIN market_works w ON w.id=i.work_id WHERE w.proposal_id=a.id) ORDER BY a.id DESC LIMIT 100`,
+         [id],
+       ),
+       works: await rows(
+@@ -674,10 +829,13 @@ export const marketService = {
+   async block(actor: number, target: number, enabled: boolean) {
+     if (actor === target) throw AppError.badRequest('Escolha outra conta.');
+     if (!(await userRepository.findById(target))) throw AppError.notFound('Conta nao encontrada.');
+-    if (enabled)
+-      await execute('INSERT IGNORE INTO market_blocks(user_id,target_id) VALUES(?,?)', [actor, target]);
+-    else await execute('DELETE FROM market_blocks WHERE user_id=? AND target_id=?', [actor, target]);
+-    return { blocked: enabled };
++    return withTransaction(async () => {
++      await lockUsers(actor, target);
++      if (enabled)
++        await execute('INSERT IGNORE INTO market_blocks(user_id,target_id) VALUES(?,?)', [actor, target]);
++      else await execute('DELETE FROM market_blocks WHERE user_id=? AND target_id=?', [actor, target]);
++      return { blocked: enabled };
++    });
+   },
+   async blocks(actor: number) {
+     return {
+diff --git a/backend/src/repositories/export.repository.ts b/backend/src/repositories/export.repository.ts
+index 35446f1..ef9057f 100644
+--- a/backend/src/repositories/export.repository.ts
++++ b/backend/src/repositories/export.repository.ts
+@@ -13,6 +13,7 @@ export const exportRepository = {
+     for (const table of ['market_preferences','market_profiles','market_goals','market_views','market_blocks']) result[table] = await query<RowDataPacket>(`SELECT * FROM ${table} WHERE user_id=?`,[userId]);
+     result.market_posts = await query<RowDataPacket>('SELECT * FROM market_posts WHERE owner_id=?',[userId]);
+     result.market_proposals = await query<RowDataPacket>('SELECT * FROM market_proposals WHERE professional_id=?',[userId]);
++    result.market_project_invites = await query<RowDataPacket>('SELECT * FROM market_project_invites WHERE customer_id=? OR professional_id=?',[userId,userId]);
+     result.market_works = await query<RowDataPacket>('SELECT * FROM market_works WHERE customer_id=? OR professional_id=?',[userId,userId]);
+     result.market_messages = await query<RowDataPacket>('SELECT * FROM market_messages WHERE sender_id=?',[userId]);
+     result.market_reviews = await query<RowDataPacket>('SELECT * FROM market_reviews WHERE author_id=?',[userId]);
+diff --git a/backend/src/scripts/marketplace-test.ts b/backend/src/scripts/marketplace-test.ts
+index 09b6807..2c021b9 100644
+--- a/backend/src/scripts/marketplace-test.ts
++++ b/backend/src/scripts/marketplace-test.ts
+@@ -287,6 +287,36 @@ async function main() {
+   await execute('UPDATE subscriptions SET plan_id=? WHERE user_id=?', [proPlan!.id, v.id]);
+   await s.post(v.id, bulk[declined].insertId);
+   check(true, 'Upgrade Pro libera detalhes alem da cota Free');
++  const invitation = { title: 'Projeto privado', description: 'Preciso de ajuda para instalar câmeras na loja.' };
++  const inviteResponse = await req('POST', `/market/profiles/${p.id}/invites`, invitation, c.token);
++  assert.equal(inviteResponse.status, 200, JSON.stringify(inviteResponse.body));
++  const inviteId = inviteResponse.body.data.id;
++  const invitePath = `/market/invites/${inviteId}`;
++  check((await req('GET', invitePath, undefined, o.token)).status === 404, 'Terceiros não podem acessar o convite');
++  check((await req('GET', '/market/invites', undefined, o.token)).body.data.invites.length === 0, 'Convite não aparece para terceiros');
++  check((await req('POST', `/market/profiles/${p.id}/invites`, invitation, c.token)).status === 409, 'Convites duplicados em aberto são impedidos');
++  check((await req('POST', invitePath + '/respond', { action: 'reply', message: 'Tenho disponibilidade.' }, p.token)).status === 200, 'Profissional pode responder');
++  check((await req('POST', invitePath + '/proposal', { amount: 500, dueDate: day, message: offer.message }, c.token)).status === 403, 'Contratante não pode propor em nome do profissional');
++  await execute('UPDATE users SET whatsapp=? WHERE id IN (?,?)', ['62999999999', c.id, p.id]);
++  await s.shareInviteWhatsapp(c.id, inviteId, true);
++  check(!(await s.invite(c.id, inviteId)).whatsappLink, 'WhatsApp não é revelado com autorização unilateral');
++  await s.shareInviteWhatsapp(p.id, inviteId, true);
++  check((await s.invite(c.id, inviteId)).whatsappLink?.startsWith('https://wa.me/'), 'WhatsApp liberado com autorização mútua');
++  await s.shareInviteWhatsapp(p.id, inviteId, false);
++  check(!(await s.invite(c.id, inviteId)).whatsappLink, 'Revogação retira o link do convite');
++  await s.proposeInvite(p.id, inviteId, { amount: 500, dueDate: day, message: offer.message });
++  await s.block(p.id, c.id, true);
++  await rejects(() => s.acceptInvite(c.id, inviteId), 'Bloqueio impede aceitar proposta privada');
++  await s.block(p.id, c.id, false);
++  const acceptedInvites = await Promise.all([s.acceptInvite(c.id, inviteId), s.acceptInvite(c.id, inviteId)]);
++  check(acceptedInvites[0].workId === acceptedInvites[1].workId, 'Aceites simultâneos criam um único trabalho');
++  const privateWork = await queryOne<Row>('SELECT post_id FROM market_works WHERE id=?', [acceptedInvites[0].workId]);
++  assert.ok(privateWork);
++  await rejects(() => s.post(o.id, privateWork.post_id), 'Projeto contratado continua fora da vitrine pública');
++  check((await s.mine(c.id)).works.some(work => work.id === acceptedInvites[0].workId), 'Projeto contratado entra em Meus trabalhos');
++  const declinedInvite = await s.inviteProfessional(c.id, p.id, invitation);
++  await s.respondInvite(p.id, declinedInvite.id, { action: 'decline' });
++  await rejects(() => s.proposeInvite(p.id, declinedInvite.id, { amount: 500, dueDate: day, message: offer.message }), 'Convite recusado não aceita proposta');
+   const exported = await req('GET', '/users/me/export', undefined, p.token);
+   check(
+     exported.status === 200 &&
+diff --git a/database/marketplace.sql b/database/marketplace.sql
+index 272f117..3a89180 100644
+--- a/database/marketplace.sql
++++ b/database/marketplace.sql
+@@ -89,3 +89,20 @@ CREATE TABLE IF NOT EXISTS market_views (
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+ -- Expanded paid CRM capacities requested for this evolution. Pricing and billing identifiers unchanged.
+ UPDATE plans SET max_clients=NULL, max_quotes_per_month=NULL WHERE code IN ('pro','pro_max');
++
++-- Private invitations become regular marketplace works only on acceptance.
++CREATE TABLE IF NOT EXISTS market_project_invites (
++ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
++ customer_id BIGINT UNSIGNED NOT NULL, professional_id BIGINT UNSIGNED NOT NULL,
++ title VARCHAR(120) NOT NULL, description VARCHAR(2000) NOT NULL,
++ status ENUM('pendente','respondido','proposta','recusado','cancelado','contratado') NOT NULL DEFAULT 'pendente',
++ reply VARCHAR(1000) NULL, amount DECIMAL(12,2) NULL, due_date DATE NULL, proposal_message VARCHAR(2000) NULL, proposed_at DATETIME NULL,
++ work_id BIGINT UNSIGNED NULL,
++ customer_whatsapp_ok TINYINT NOT NULL DEFAULT 0, professional_whatsapp_ok TINYINT NOT NULL DEFAULT 0,
++ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
++ KEY idx_market_invites_customer(customer_id,id), KEY idx_market_invites_professional(professional_id,id),
++ KEY idx_market_invites_proposals(professional_id,proposed_at), UNIQUE KEY uk_market_invites_work(work_id),
++ FOREIGN KEY(customer_id) REFERENCES users(id) ON DELETE CASCADE,
++ FOREIGN KEY(professional_id) REFERENCES users(id) ON DELETE CASCADE,
++ FOREIGN KEY(work_id) REFERENCES market_works(id) ON DELETE SET NULL
++) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+diff --git a/frontend/app/mercado/convidar.tsx b/frontend/app/mercado/convidar.tsx
+new file mode 100644
+index 0000000..717b055
+--- /dev/null
++++ b/frontend/app/mercado/convidar.tsx
+@@ -0,0 +1,34 @@
++import { useState } from 'react';
++import { useLocalSearchParams, useRouter } from 'expo-router';
++import { RulesConsent } from '../../src/features/marketplace/RulesConsent';
++import { api, Button, Feedback, Field, MarketScreen, Note, useAction, useData } from '../../src/features/marketplace/ui';
++
++export default function Convidar() {
++  const { id } = useLocalSearchParams<{ id: string }>();
++  const router = useRouter();
++  const profile = useData('/market/profiles/' + encodeURIComponent(id ?? ''));
++  const me = useData('/market/me');
++  const action = useAction();
++  const [title, setTitle] = useState('');
++  const [description, setDescription] = useState('');
++  const [accepted, setAccepted] = useState(false);
++  const needsRules = me.data?.preferences?.consent_version !== me.data?.rulesVersion;
++  async function send() {
++    const result = await api.post<{ id: number }>('/market/profiles/' + encodeURIComponent(id) + '/invites', {
++      title, description, ...(accepted ? { acceptRules: true } : {}),
++    });
++    router.replace({ pathname: '/mercado/convite', params: { id: String(result.id) } });
++  }
++  return <MarketScreen title="Convidar para um projeto" loading={profile.loading || me.loading}
++    error={profile.error || me.error} retry={() => { void profile.load(); void me.load(); }}>
++    <Note>Para: {profile.data?.profile.name}</Note>
++    <Note>Só vocês dois verão o convite. Explique o que precisa e o prazo desejado.</Note>
++    <Field label="Título do projeto" placeholder="Ex.: Editar quatro vídeos para Reels" value={title} onChangeText={setTitle} maxLength={120} />
++    <Field label="O que você precisa?" value={description} onChangeText={setDescription} multiline maxLength={2000} />
++    {needsRules ? <RulesConsent value={accepted} onChange={setAccepted} privateInvite /> : null}
++    <Feedback action={action} />
++    <Button label="Enviar convite" loading={action.busy}
++      disabled={title.trim().length < 5 || description.trim().length < 15 || (needsRules && !accepted)}
++      onPress={() => void action.run(send)} />
++  </MarketScreen>;
++}
+diff --git a/frontend/app/mercado/convite.tsx b/frontend/app/mercado/convite.tsx
+new file mode 100644
+index 0000000..6de80dd
+--- /dev/null
++++ b/frontend/app/mercado/convite.tsx
+@@ -0,0 +1,81 @@
++import { useState } from 'react';
++import { Linking } from 'react-native';
++import { useLocalSearchParams, useRouter } from 'expo-router';
++import { DateField } from '../../src/features/marketplace/DateField';
++import { api, amount, Button, Card, currency, Feedback, Field, MarketScreen, Note, prettyDay, styles, Text, useAction, useData } from '../../src/features/marketplace/ui';
++
++const labels: Record<string, string> = {
++  pendente: 'Aguardando resposta', respondido: 'Respondido', proposta: 'Proposta enviada',
++  recusado: 'Recusado', cancelado: 'Cancelado', contratado: 'Contratado',
++};
++
++export default function Convite() {
++  const { id } = useLocalSearchParams<{ id: string }>();
++  const router = useRouter();
++  const path = '/market/invites/' + encodeURIComponent(id ?? '');
++  const d = useData(path);
++  const action = useAction(d.load);
++  const [form, setForm] = useState<'reply' | 'proposal' | null>(null);
++  const [reply, setReply] = useState('');
++  const [message, setMessage] = useState('');
++  const [price, setPrice] = useState('');
++  const [dueDate, setDueDate] = useState('');
++  const i = d.data;
++  const received = i?.direction === 'recebido';
++  const canPropose = received && ['pendente', 'respondido'].includes(i?.status);
++  const open = ['pendente', 'respondido', 'proposta'].includes(i?.status);
++  const value = amount(price);
++  function respond(next: 'reply' | 'decline' | 'cancel') {
++    return action.run(() => api.post(path + '/respond', { action: next, ...(next === 'reply' ? { message: reply } : {}) }));
++  }
++
++  return <MarketScreen title="Convite de projeto" loading={d.loading} error={d.error} retry={d.load}>
++    {i ? <>
++      <Card>
++        <Text style={styles.title}>{i.title}</Text>
++        <Note>{labels[i.status] ?? i.status}</Note>
++        <Note>{i.description}</Note>
++      </Card>
++      {i.reply ? <Card><Text style={styles.label}>Resposta do profissional</Text><Note>{i.reply}</Note></Card> : null}
++      {i.proposalMessage ? <Card>
++        <Text style={styles.title}>Proposta</Text>
++        <Note>{currency(i.amount)} · Entrega até {prettyDay(i.dueDate)}</Note>
++        <Note>{i.proposalMessage}</Note>
++      </Card> : null}
++      {canPropose ? <>
++        {i.status === 'pendente' ? <Button label="Responder ao convite" variant="outline" onPress={() => setForm('reply')} /> : null}
++        <Button label="Enviar proposta" onPress={() => setForm('proposal')} />
++        {form === 'reply' && i.status === 'pendente' ? <Card>
++          <Field label="Sua resposta" multiline maxLength={1000} value={reply} onChangeText={setReply} />
++          <Button label="Enviar resposta" loading={action.busy} disabled={!reply.trim()} onPress={() => void respond('reply')} />
++        </Card> : null}
++        {form === 'proposal' ? <Card>
++          <Field label="Valor (R$)" keyboardType="decimal-pad" value={price} onChangeText={setPrice} />
++          <DateField label="Prazo de entrega" value={dueDate} onChange={setDueDate} optional={false} />
++          <Field label="O que a proposta inclui?" multiline maxLength={2000} value={message} onChangeText={setMessage} />
++          <Button label="Confirmar envio" loading={action.busy}
++            disabled={value === null || !Number.isFinite(value) || value <= 0 || !dueDate || message.trim().length < 10}
++            onPress={() => void action.run(() => api.post(path + '/proposal', { amount: value, dueDate, message }), 'Proposta enviada.')} />
++        </Card> : null}
++      </> : null}
++      {!received && i.status === 'proposta' ? <Button label="Aceitar proposta" loading={action.busy}
++        onPress={() => void action.run(() => api.post(path + '/accept'), 'Proposta aceita. Seu trabalho foi criado.')} /> : null}
++      {open ? <Button label={received ? 'Recusar convite' : 'Cancelar convite'} variant="outline" disabled={action.busy}
++        onPress={() => void respond(received ? 'decline' : 'cancel')} /> : null}
++      {i.workId ? <Button label="Abrir trabalho" onPress={() => router.push({ pathname: '/mercado/trabalho', params: { id: String(i.workId) } })} /> : null}
++      {i.shareAllowed ? <Card>
++        <Text style={styles.label}>Conversar no WhatsApp</Text>
++        <Note>Seu número só será disponibilizado neste convite se os dois autorizarem.</Note>
++        <Button label={i.sharing ? 'Parar de compartilhar meu WhatsApp' : 'Autorizar meu WhatsApp neste projeto'}
++          variant="outline" loading={action.busy}
++          onPress={() => void action.run(() => api.post(path + '/whatsapp', { enabled: !i.sharing }))} />
++        {i.whatsappLink ? <Button label="Continuar no WhatsApp"
++          onPress={() => void action.run(() => Linking.openURL(i.whatsappLink), 'WhatsApp aberto.')} />
++          : i.sharing ? <Note>Aguardando a autorização da outra pessoa.</Note> : null}
++      </Card> : null}
++      <Button label="Denunciar usuário" variant="ghost" onPress={() => router.push('/mercado/denunciar?type=user&id=' + i.counterpartId)} />
++      <Feedback action={action} />
++    </> : null}
++    <Button label="Ver todos os convites" variant="ghost" onPress={() => router.replace('/mercado/convites')} />
++  </MarketScreen>;
++}
+diff --git a/frontend/app/mercado/convites.tsx b/frontend/app/mercado/convites.tsx
+new file mode 100644
+index 0000000..f2c2fb6
+--- /dev/null
++++ b/frontend/app/mercado/convites.tsx
+@@ -0,0 +1,31 @@
++import { useState } from 'react';
++import { useRouter } from 'expo-router';
++import { Button, Card, Choices, MarketScreen, Note, Text, styles, useData } from '../../src/features/marketplace/ui';
++
++const inviteLabels: Record<string, string> = {
++  pendente: 'Aguardando resposta', respondido: 'Respondido', proposta: 'Proposta enviada',
++  recusado: 'Recusado', cancelado: 'Cancelado', contratado: 'Contratado',
++};
++
++type Invite = { id: number; title: string; status: string; counterpart: string; direction: 'recebido' | 'enviado' };
++
++export default function Convites() {
++  const router = useRouter();
++  const d = useData('/market/invites');
++  const [tab, setTab] = useState('Recebidos');
++  const items = (d.data?.invites as Invite[] | undefined)?.filter(i =>
++    i.direction === (tab === 'Recebidos' ? 'recebido' : 'enviado')) ?? [];
++
++  return <MarketScreen title="Convites de projeto" subtitle="Acompanhe os convites e propostas privadas."
++    loading={d.loading} error={d.error} retry={d.load}>
++    <Choices label="Convites" options={['Recebidos', 'Enviados']} value={tab} onChange={setTab} />
++    {!items.length ? <Note>Nenhum convite nesta lista.</Note> : null}
++    {items.map(i => <Card key={i.id}>
++      <Text style={styles.title}>{i.title}</Text>
++      <Note>{i.counterpart} · {inviteLabels[i.status] ?? i.status}</Note>
++      <Button label="Ver convite" variant="outline"
++        onPress={() => router.push({ pathname: '/mercado/convite', params: { id: String(i.id) } })} />
++    </Card>)}
++    <Button label="Encontrar profissionais" variant="ghost" onPress={() => router.push('/mercado/profissionais')} />
++  </MarketScreen>;
++}
+diff --git a/frontend/app/mercado/index.tsx b/frontend/app/mercado/index.tsx
+index 9fec54b..3c11fc7 100644
+--- a/frontend/app/mercado/index.tsx
++++ b/frontend/app/mercado/index.tsx
+@@ -22,6 +22,7 @@ export default function Mercado(){
+  }
+  return <MarketScreen title="Oportunidades" subtitle="Encontre serviços ou acompanhe seus anúncios.">
+   <Button label="+ Publicar oportunidade" onPress={()=>router.push('/mercado/publicar')}/>
++  <Button label="Convites de projeto" variant="outline" onPress={()=>router.push('/mercado/convites')}/>
+   <Choices label="O que você quer ver?" options={['Explorar','Minhas publicações','Propostas enviadas','Meus trabalhos']} value={tab} onChange={setTab}/>
+   {tab!=='Explorar'?<MyActivity tab={tab==='Minhas publicações'?'posts':tab==='Propostas enviadas'?'proposals':'works'}/>:<>
+    <Field label="Buscar oportunidades" placeholder="Ex.: eletricista, design, manutenção..." value={search} maxLength={100} onChangeText={S} onSubmitEditing={apply}/>
+diff --git a/frontend/app/mercado/perfil-profissional.tsx b/frontend/app/mercado/perfil-profissional.tsx
+index 54deef7..1f47820 100644
+--- a/frontend/app/mercado/perfil-profissional.tsx
++++ b/frontend/app/mercado/perfil-profissional.tsx
+@@ -152,7 +152,8 @@ export default function PerfilProfissional() {
+             maxLength={1500}
+           />
+           <Field
+-            label="Minha experiência"
++            label="Experiência e exemplos de trabalho"
++            placeholder="Você pode descrever projetos pessoais, acadêmicos ou de clientes."
+             value={form.experience}
+             onChangeText={(v) => set('experience', v)}
+             multiline
+@@ -238,8 +239,9 @@ export default function PerfilProfissional() {
+               {data.profile.price_from != null ? currency(data.profile.price_from) : 'A combinar'}
+             </Note>
+           </Card>
++          <Button label="Convidar para um projeto" onPress={() => router.push({ pathname: '/mercado/convidar', params: { id } })} />
+           <Button label="Publicar um pedido de serviço" onPress={() => router.push('/mercado/publicar')} />
+-          <Note>A conexão e a conversa são liberadas quando uma proposta é aceita.</Note>
++          <Note>Envie um convite privado para combinar o trabalho e receber uma proposta.</Note>
+           {data.reviews.map((r: any) => (
+             <Card key={r.id} style={styles.card}>
+               <Text style={styles.label}>
+diff --git a/frontend/src/features/marketplace/RulesConsent.tsx b/frontend/src/features/marketplace/RulesConsent.tsx
+index a3593db..5efc31a 100644
+--- a/frontend/src/features/marketplace/RulesConsent.tsx
++++ b/frontend/src/features/marketplace/RulesConsent.tsx
+@@ -1,13 +1,13 @@
+ import { Pressable } from 'react-native';
+ import { useRouter } from 'expo-router';
+ import { Button, Card, Text, Note, styles, theme } from './ui';
+-export function RulesConsent({value,onChange}:{value:boolean;onChange:(value:boolean)=>void}) {
++export function RulesConsent({value,onChange,privateInvite=false}:{value:boolean;onChange:(value:boolean)=>void;privateInvite?:boolean}) {
+   const router=useRouter();
+   return <Card>
+-    <Text style={styles.title}>Regras para publicar</Text>
++    <Text style={styles.title}>{privateInvite?'Regras para enviar convites':'Regras para publicar'}</Text>
+     <Note>Publique somente serviços e pedidos legais. Não são permitidos nudez, conteúdo sexual, venda de armas ou drogas, violência explícita, golpes, ameaças ou discriminação.</Note>
+     <Note>Use fotos próprias ou autorizadas. Não exponha documentos, endereço completo ou dados de outras pessoas.</Note>
+-    <Note>O anúncio e as fotos passam por análise antes de aparecerem para outras pessoas. Alterações precisam de nova aprovação.</Note>
++    <Note>{privateInvite ? 'Convide apenas para projetos reais e respeite a decisão do profissional. O convite não é publicado no marketplace.' : 'O anúncio e as fotos passam por análise antes de aparecerem para outras pessoas. Alterações precisam de nova aprovação.'}</Note>
+     <Button label="Ler todas as regras" variant="ghost" onPress={()=>router.push('/regras-mercado')} />
+     <Pressable accessibilityRole="checkbox" accessibilityState={{checked:value}} accessibilityLabel="Li e aceito as regras do marketplace" onPress={()=>onChange(!value)} style={{paddingVertical:12,minHeight:48}}>
+       <Text style={[styles.label,{color:theme.colors.primaryInk}]}>{value?'☑':'☐'} Li e aceito as regras do marketplace</Text>
+-- 
+2.52.0
+

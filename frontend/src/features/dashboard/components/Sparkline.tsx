@@ -13,8 +13,8 @@ interface SparklineProps {
 
 /**
  * Mini grafico do card de destaque.
- * Recebe os totais reais por semana vindos da API - se o mes ainda nao teve
- * venda, a linha fica reta na base, que e a informacao correta.
+ * Recebe os totais reais por semana vindos da API. Se o mês ainda não teve
+ * venda, a linha fica reta na base, que é a informação correta.
  */
 export function Sparkline({
   values,
